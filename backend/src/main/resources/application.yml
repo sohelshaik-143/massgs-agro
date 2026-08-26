@@ -1,0 +1,51 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: agricultural-decision-engine
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/massgs_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Kolkata}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      connection-timeout: 20000
+
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    secret: 9a4f2c8d7e1b5a3f6c9d8e2b7a4f1c5d8e9b2a6f3c7d1e5f8a4b9c2d7e1f3a5b
+    expiration-ms: 86400000 # 24 hours
+
+agmarknet:
+  api:
+    url: ${AGMARKNET_API_URL:https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070}
+    key: ${AGMARKNET_API_KEY:579b464db66ec23bdd000001cdd3946f1f4b42d740c06173a11684c3}
+  ingestion:
+    stale-threshold-hours: 48
+    enable-snapshot-fallback: true
+
+logging:
+  level:
+    root: INFO
+    com.massgs: DEBUG
+    org.hibernate.SQL: WARN
