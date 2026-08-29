@@ -38,11 +38,12 @@ graph TD
 ### Backend
 * **Language & Runtime**: Java 21 LTS
 * **Framework**: Spring Boot 3.4.1
+* **Architecture**: Clean `MarketDataProvider` abstraction with `AgmarknetLiveApiDataProvider` (Data.gov.in REST API) and `AgmarknetDatasetDataProvider`
 * **Database Access**: Spring Data JPA, Hibernate ORM
 * **Database Migrations**: Flyway Migration (`V1__init_schema.sql`)
 * **Security & Auth**: Spring Security 6, Stateless JWT (`io.jsonwebtoken 0.12.6`), BCrypt
 * **Build Tool**: Apache Maven 3.9.x
-* **Testing**: JUnit 5, AssertJ, Spring Security Test
+* **Testing**: JUnit 5, Mockito, AssertJ (100% Pass Rate across Unit & Ingestion Tests)
 
 ### Frontend
 * **Core**: React 18, Vite, JavaScript (ESNext)

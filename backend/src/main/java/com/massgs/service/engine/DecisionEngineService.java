@@ -33,6 +33,7 @@ public class DecisionEngineService {
         Crop crop = listing.getCrop();
         String originDistrict = listing.getLocationDistrict();
         BigDecimal quantity = listing.getQuantityKg();
+        BigDecimal userTransport = listing.getUserProvidedTransportCostPerKg();
 
         // 1. Fetch recent verified prices for crop across mandis
         List<MarketPrice> prices = marketPriceRepository.findRecentPricesForCrop(crop.getId(), LocalDate.now().minusDays(7));
@@ -59,7 +60,6 @@ public class DecisionEngineService {
         CandidateOption bestOption = null;
         List<CandidateOption> candidates = new ArrayList<>();
 
-        // Optional AGMARKNET datasource reference
         Optional<DataSourceInfo> agmarknetSource = dataSourceRepository.findByName("AGMARKNET");
 
         for (MarketPrice mp : prices) {
@@ -69,9 +69,14 @@ public class DecisionEngineService {
 
             BigDecimal transportCostPerKg = null;
             Integer transitHours = 12;
+            boolean isUserProvidedTransport = false;
+
             if (quoteOpt.isPresent()) {
                 transportCostPerKg = quoteOpt.get().getCostPerKg();
                 transitHours = quoteOpt.get().getTransitTimeHours();
+            } else if (userTransport != null && userTransport.compareTo(BigDecimal.ZERO) >= 0) {
+                transportCostPerKg = userTransport;
+                isUserProvidedTransport = true;
             }
 
             CalculationInput calcInput = CalculationInput.builder()
@@ -93,6 +98,7 @@ public class DecisionEngineService {
                     .marketPrice(mp)
                     .calculationResult(calcResult)
                     .dataSource(agmarknetSource.orElse(null))
+                    .isUserProvidedTransport(isUserProvidedTransport)
                     .build();
 
             candidates.add(candidate);
@@ -105,7 +111,9 @@ public class DecisionEngineService {
                 Optional<TransportQuote> quoteOpt = transportQuoteRepository
                         .findByOriginDistrictIgnoreCaseAndDestinationDistrictIgnoreCase(originDistrict, br.getTargetDistrict());
 
-                BigDecimal transportCostPerKg = quoteOpt.map(TransportQuote::getCostPerKg).orElse(null);
+                BigDecimal transportCostPerKg = quoteOpt.map(TransportQuote::getCostPerKg)
+                        .orElse(userTransport);
+                boolean isUserProvidedTransport = quoteOpt.isEmpty() && userTransport != null;
 
                 CalculationInput calcInput = CalculationInput.builder()
                         .quantityKg(quantity)
@@ -125,6 +133,7 @@ public class DecisionEngineService {
                         .buyer(br.getBuyer())
                         .buyerRequirement(br)
                         .calculationResult(calcResult)
+                        .isUserProvidedTransport(isUserProvidedTransport)
                         .build());
             }
         }
@@ -175,13 +184,17 @@ public class DecisionEngineService {
                         bestOption.getMarket().getMandiName() + " APMC" : bestOption.getBuyer().getOrganizationName()))
                 .build());
 
+        String transportDesc = bestResult.isTransportCostAvailable() ?
+                (bestOption.isUserProvidedTransport() ? "User-provided transport quote applied (₹" + bestOption.getCalculationResult().getTransportCost() + ")." : "Verified regional transport quote applied.") :
+                "Transport quote unavailable for route.";
+
         rec.getFactors().add(RecommendationFactor.builder()
                 .recommendation(rec)
                 .factorKey("TRANSPORT_COST")
                 .factorValue(bestResult.isTransportCostAvailable() ? "₹" + bestResult.getTransportCost() : "UNAVAILABLE")
                 .factorUnit("₹")
                 .missingFlag(!bestResult.isTransportCostAvailable())
-                .description(bestResult.isTransportCostAvailable() ? "Verified transport quote applied." : "Transport quote unavailable for route.")
+                .description(transportDesc)
                 .build());
 
         if (bestOption.getMarketPrice() != null) {
@@ -206,5 +219,6 @@ public class DecisionEngineService {
         private BuyerRequirement buyerRequirement;
         private CalculationResult calculationResult;
         private DataSourceInfo dataSource;
+        private boolean isUserProvidedTransport;
     }
 }

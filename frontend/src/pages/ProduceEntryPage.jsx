@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { farmerApi } from '../services/api';
 import VoiceInputModal from '../components/VoiceInputModal';
-import { Sprout, Mic, Sparkles, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Sprout, Mic, Sparkles, AlertCircle, ArrowRight, Truck, User } from 'lucide-react';
 
 export default function ProduceEntryPage() {
   const navigate = useNavigate();
@@ -11,6 +11,8 @@ export default function ProduceEntryPage() {
   const [error, setError] = useState(null);
 
   const [formData, setFormData] = useState({
+    farmerName: '',
+    contactPhone: '',
     cropName: 'Tomato',
     varietyName: 'Hybrid Grade 1',
     quantityValue: '2',
@@ -19,6 +21,7 @@ export default function ProduceEntryPage() {
     state: 'Andhra Pradesh',
     readyDate: new Date().toISOString().split('T')[0],
     qualityGrade: 'A',
+    userProvidedTransportCostPerKg: '',
   });
 
   const crops = [
@@ -57,7 +60,7 @@ export default function ProduceEntryPage() {
     setLoading(true);
     setError(null);
 
-    // Calculate standardized quantity in KG
+    // Standardize quantity to KG
     let quantityKg = parseFloat(formData.quantityValue);
     if (formData.quantityUnit === 'tonne') quantityKg *= 1000;
     else if (formData.quantityUnit === 'quintal') quantityKg *= 100;
@@ -68,8 +71,15 @@ export default function ProduceEntryPage() {
       return;
     }
 
+    let transportCost = null;
+    if (formData.userProvidedTransportCostPerKg && !isNaN(parseFloat(formData.userProvidedTransportCostPerKg))) {
+      transportCost = parseFloat(formData.userProvidedTransportCostPerKg);
+    }
+
     try {
       const res = await farmerApi.createListing({
+        farmerName: formData.farmerName || 'Registered Farmer',
+        contactPhone: formData.contactPhone,
         cropName: formData.cropName,
         varietyName: formData.varietyName,
         quantityKg: quantityKg,
@@ -77,9 +87,9 @@ export default function ProduceEntryPage() {
         district: formData.district,
         state: formData.state,
         qualityGrade: formData.qualityGrade,
+        userProvidedTransportCostPerKg: transportCost,
       });
 
-      // Navigate directly to recommendation results
       navigate(`/recommendation/${res.data.id}`);
     } catch (err) {
       console.error('Error creating produce listing:', err);
@@ -96,7 +106,7 @@ export default function ProduceEntryPage() {
             <span className="text-xs font-bold text-agri-700 tracking-wider uppercase">Step 1: Produce Details</span>
             <h1 className="text-2xl font-extrabold text-slate-900 mt-1">Enter Your Current Crop</h1>
             <p className="text-sm text-slate-600 mt-1">
-              Provide real crop information. Our decision engine will match verified AGMARKNET prices and platform buyers.
+              Provide real crop information. Our decision engine matches verified AGMARKNET prices and authentic platform buyers.
             </p>
           </div>
 
@@ -118,6 +128,36 @@ export default function ProduceEntryPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Optional Farmer Info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center">
+                <User className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                Farmer Name (Optional)
+              </label>
+              <input
+                type="text"
+                value={formData.farmerName}
+                onChange={(e) => setFormData({ ...formData, farmerName: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-earth-300 bg-white text-sm text-slate-900 focus:ring-2 focus:ring-agri-600 focus:outline-none"
+                placeholder="e.g. Ramesh Patel"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                Contact Phone (Optional)
+              </label>
+              <input
+                type="tel"
+                value={formData.contactPhone}
+                onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-earth-300 bg-white text-sm text-slate-900 focus:ring-2 focus:ring-agri-600 focus:outline-none"
+                placeholder="+91 98765 43210"
+              />
+            </div>
+          </div>
+
           {/* Crop Selector */}
           <div>
             <label className="block text-sm font-bold text-slate-800 mb-2">Select Crop</label>
@@ -239,6 +279,26 @@ export default function ProduceEntryPage() {
                 required
               />
             </div>
+          </div>
+
+          {/* User-Provided Transport Quote (Optional) */}
+          <div className="p-4 rounded-2xl bg-earth-50 border border-earth-200">
+            <div className="flex items-center space-x-2 text-slate-800 font-bold text-xs uppercase tracking-wider mb-1">
+              <Truck className="w-4 h-4 text-agri-700" />
+              <span>Quoted Transport Cost (₹/kg) — Optional</span>
+            </div>
+            <p className="text-xs text-slate-500 mb-2">
+              If you have an actual quote from a transporter, enter it here to compute your exact net realization immediately.
+            </p>
+            <input
+              type="number"
+              step="0.10"
+              min="0"
+              placeholder="e.g. 2.50 (Leave blank if unknown)"
+              value={formData.userProvidedTransportCostPerKg}
+              onChange={(e) => setFormData({ ...formData, userProvidedTransportCostPerKg: e.target.value })}
+              className="w-full px-4 py-2 rounded-xl border border-earth-300 bg-white text-sm text-slate-900 focus:ring-2 focus:ring-agri-600 focus:outline-none"
+            />
           </div>
 
           <div className="pt-4">

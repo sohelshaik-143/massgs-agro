@@ -48,6 +48,9 @@ public class ProduceListing {
     @Column(nullable = false)
     private String status; // AVAILABLE, AGGREGATED, SOLD, EXPIRED
 
+    @Column(name = "user_provided_transport_cost_per_kg")
+    private BigDecimal userProvidedTransportCostPerKg;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 

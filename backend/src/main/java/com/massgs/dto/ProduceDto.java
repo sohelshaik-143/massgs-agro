@@ -15,6 +15,8 @@ public class ProduceDto {
     @Builder
     public static class CreateListingRequest {
         private Long farmerId;
+        private String farmerName;
+        private String contactPhone;
 
         @NotNull
         private String cropName;
@@ -34,6 +36,8 @@ public class ProduceDto {
         private String state;
 
         private String qualityGrade; // A, B, C
+
+        private BigDecimal userProvidedTransportCostPerKg; // Optional user transport quote
     }
 
     @Getter
@@ -54,6 +58,7 @@ public class ProduceDto {
         private String locationState;
         private String qualityGrade;
         private String status;
+        private BigDecimal userProvidedTransportCostPerKg;
         private LocalDateTime createdAt;
     }
 }

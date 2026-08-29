@@ -12,8 +12,10 @@ import com.massgs.service.engine.NetRealizationCalculator.CalculationInput;
 import com.massgs.service.engine.NetRealizationCalculator.CalculationResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -32,16 +34,22 @@ public class ScenarioController {
     @PostMapping
     public ResponseEntity<ScenarioDto.SimulationResponse> runScenario(@Valid @RequestBody ScenarioDto.SimulationRequest request) {
         ProduceListing listing = produceListingRepository.findById(request.getProduceListingId())
-                .orElseThrow(() -> new IllegalArgumentException("Listing not found: " + request.getProduceListingId()));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produce listing not found with ID: " + request.getProduceListingId()));
 
         List<MarketPrice> recentPrices = marketPriceRepository.findRecentPricesForCrop(listing.getCrop().getId(), LocalDate.now().minusDays(7));
-        BigDecimal basePrice = recentPrices.isEmpty() ? new BigDecimal("25.00") : recentPrices.get(0).getModalPricePerKg();
+        if (recentPrices.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "No verified market price available for crop '" + listing.getCrop().getName() + "'. Simulation requires verified market data.");
+        }
+
+        MarketPrice baseMarketPrice = recentPrices.get(0);
+        BigDecimal basePrice = baseMarketPrice.getModalPricePerKg();
 
         CalculationInput input = CalculationInput.builder()
                 .quantityKg(listing.getQuantityKg())
                 .pricePerKg(basePrice)
-                .priceDate(LocalDate.now())
-                .priceQualityStatus("VERIFIED")
+                .priceDate(baseMarketPrice.getArrivalDate())
+                .priceQualityStatus(baseMarketPrice.getDataQualityStatus())
                 .transportCostPerKg(request.getCustomTransportCostPerKg())
                 .transitTimeHours(12)
                 .storageDays(request.getCustomStorageDays() != null ? request.getCustomStorageDays() : 0)
@@ -70,7 +78,8 @@ public class ScenarioController {
                 .apmcFee(result.getApmcMarketFee())
                 .perishabilityLoss(result.getPerishabilityLoss())
                 .computedNetRealization(result.getExpectedNetRealization())
-                .disclaimer("Simulated from verified base market price ₹" + basePrice + "/kg and your custom transport/storage inputs.")
+                .disclaimer("Simulated using verified " + baseMarketPrice.getMarket().getMandiName() +
+                        " APMC modal price (₹" + basePrice + "/kg) and user-provided parameters.")
                 .build());
     }
 }

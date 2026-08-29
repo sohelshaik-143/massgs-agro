@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS produce_listings (
     location_state VARCHAR(100) NOT NULL,
     quality_grade VARCHAR(50) DEFAULT 'A', -- A, B, C
     status VARCHAR(50) DEFAULT 'AVAILABLE', -- AVAILABLE, AGGREGATED, SOLD, EXPIRED
+    user_provided_transport_cost_per_kg DECIMAL(10, 2),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_produce_farmer FOREIGN KEY (farmer_id) REFERENCES farmers(id) ON DELETE CASCADE,

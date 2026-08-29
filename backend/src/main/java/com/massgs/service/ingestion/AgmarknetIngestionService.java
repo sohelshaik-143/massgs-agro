@@ -1,26 +1,20 @@
 package com.massgs.service.ingestion;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.massgs.entity.*;
 import com.massgs.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PostConstruct;
-import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -33,20 +27,20 @@ public class AgmarknetIngestionService {
     private final MarketRepository marketRepository;
     private final CropRepository cropRepository;
     private final MarketPriceRepository marketPriceRepository;
-    private final ResourceLoader resourceLoader;
-    private final ObjectMapper objectMapper;
+    private final AgmarknetLiveApiDataProvider liveApiDataProvider;
 
     @Value("${agmarknet.ingestion.stale-threshold-hours:48}")
     private int staleThresholdHours;
 
     @PostConstruct
-    public void initDataSourcesAndSeed() {
+    public void initDataSources() {
         try {
             ensureDataSourceExists();
             ensureSeedCrops();
-            ingestVerifiedSnapshot();
+            // Automatically ingest authentic data on startup so system is ready
+            ingestMarketData(null, null);
         } catch (Exception e) {
-            log.error("Failed to initialize Agmarknet dataset ingestion", e);
+            log.error("Failed to initialize Agmarknet data sources", e);
         }
     }
 
@@ -84,7 +78,12 @@ public class AgmarknetIngestionService {
 
     @Transactional
     public DataIngestionRun ingestVerifiedSnapshot() {
-        log.info("Starting AGMARKNET verified dataset ingestion...");
+        return ingestMarketData(null, null);
+    }
+
+    @Transactional
+    public DataIngestionRun ingestMarketData(String commodity, String state) {
+        log.info("Starting AGMARKNET verified data ingestion pipeline for commodity: {}, state: {}...", commodity, state);
         DataSourceInfo dataSource = ensureDataSourceExists();
 
         DataIngestionRun run = DataIngestionRun.builder()
@@ -93,7 +92,7 @@ public class AgmarknetIngestionService {
                 .status("IN_PROGRESS")
                 .recordsProcessed(0)
                 .recordsFailed(0)
-                .logDetails("Ingesting verified snapshot from classpath resource...")
+                .logDetails("Ingesting verified records via MarketDataProvider...")
                 .build();
         run = dataIngestionRunRepository.save(run);
 
@@ -101,119 +100,109 @@ public class AgmarknetIngestionService {
         int failed = 0;
 
         try {
-            Resource resource = resourceLoader.getResource("classpath:data/agmarknet_verified_snapshot.json");
-            if (!resource.exists()) {
-                log.warn("Snapshot resource classpath:data/agmarknet_verified_snapshot.json not found!");
-                run.setStatus("FAILED");
-                run.setLogDetails("Snapshot file missing.");
-                return dataIngestionRunRepository.save(run);
-            }
+            List<MarketDataProvider.RawMarketRecord> rawRecords = liveApiDataProvider.fetchMarketRecords(commodity, state);
 
-            try (InputStream is = resource.getInputStream()) {
-                List<Map<String, Object>> records = objectMapper.readValue(is, new TypeReference<List<Map<String, Object>>>() {});
-
-                for (Map<String, Object> rec : records) {
-                    try {
-                        processSingleRecord(rec, dataSource);
-                        processed++;
-                    } catch (Exception ex) {
-                        log.error("Failed to process AGMARKNET record: {}", rec, ex);
-                        failed++;
-                    }
+            for (MarketDataProvider.RawMarketRecord rec : rawRecords) {
+                try {
+                    processMarketRecord(rec);
+                    processed++;
+                } catch (Exception ex) {
+                    log.error("Failed to process market record: {}", rec.getMarket(), ex);
+                    failed++;
                 }
             }
 
+            int totalCount = (int) marketPriceRepository.count();
+            int staleCount = (int) marketPriceRepository.findAll().stream()
+                    .filter(p -> "STALE".equalsIgnoreCase(p.getDataQualityStatus()))
+                    .count();
+
             dataSource.setLastSuccessfulIngestion(LocalDateTime.now());
-            dataSource.setTotalRecordCount((int) marketPriceRepository.count());
-            dataSource.setStatus("CONNECTED");
+            dataSource.setTotalRecordCount(totalCount);
+            dataSource.setStaleRecordCount(staleCount);
+            dataSource.setStatus(totalCount > 0 ? "CONNECTED" : "DEGRADED");
             dataSourceRepository.save(dataSource);
 
-            run.setStatus("SUCCESS");
+            run.setStatus(failed > 0 && processed == 0 ? "FAILED" : "SUCCESS");
             run.setRecordsProcessed(processed);
             run.setRecordsFailed(failed);
-            run.setLogDetails("Successfully processed " + processed + " verified records (" + failed + " failed).");
-            log.info("AGMARKNET dataset ingestion completed successfully. Processed: {}, Failed: {}", processed, failed);
+            run.setLogDetails("Processed " + processed + " verified records (" + failed + " failed).");
+            log.info("Ingestion completed. Processed: {}, Failed: {}, Total in DB: {}", processed, failed, totalCount);
 
         } catch (Exception e) {
-            log.error("Error during snapshot ingestion", e);
+            log.error("Ingestion pipeline exception", e);
             run.setStatus("FAILED");
             run.setRecordsFailed(failed);
-            run.setLogDetails("Ingestion exception: " + e.getMessage());
+            run.setLogDetails("Ingestion error: " + e.getMessage());
         }
 
         return dataIngestionRunRepository.save(run);
     }
 
-    private void processSingleRecord(Map<String, Object> rec, DataSourceInfo dataSource) {
-        String state = (String) rec.get("state");
-        String district = (String) rec.get("district");
-        String marketName = (String) rec.get("market");
-        String commodityName = (String) rec.get("commodity");
-        String variety = (String) rec.get("variety");
-        String arrivalDateStr = (String) rec.get("arrival_date");
-
-        BigDecimal minQuintal = new BigDecimal(rec.get("min_price_quintal").toString());
-        BigDecimal maxQuintal = new BigDecimal(rec.get("max_price_quintal").toString());
-        BigDecimal modalQuintal = new BigDecimal(rec.get("modal_price_quintal").toString());
-
-        // Convert Quintal to Kg (1 Quintal = 100 Kg)
-        BigDecimal hundred = new BigDecimal("100");
-        BigDecimal minKg = minQuintal.divide(hundred, 2, RoundingMode.HALF_UP);
-        BigDecimal maxKg = maxQuintal.divide(hundred, 2, RoundingMode.HALF_UP);
-        BigDecimal modalKg = modalQuintal.divide(hundred, 2, RoundingMode.HALF_UP);
-
-        LocalDate arrivalDate = LocalDate.parse(arrivalDateStr, DateTimeFormatter.ISO_LOCAL_DATE);
+    private void processMarketRecord(MarketDataProvider.RawMarketRecord rec) {
+        BigDecimal minKg = normalizeToKg(rec.getMinPricePerUnit(), rec.getReportedUnit());
+        BigDecimal maxKg = normalizeToKg(rec.getMaxPricePerUnit(), rec.getReportedUnit());
+        BigDecimal modalKg = normalizeToKg(rec.getModalPricePerUnit(), rec.getReportedUnit());
 
         // Find or create Market
-        Market market = marketRepository.findByMandiNameAndDistrictAndState(marketName, district, state)
+        Market market = marketRepository.findByMandiNameAndDistrictAndState(rec.getMarket(), rec.getDistrict(), rec.getState())
                 .orElseGet(() -> marketRepository.save(Market.builder()
-                        .mandiName(marketName)
-                        .district(district)
-                        .state(state)
+                        .mandiName(rec.getMarket())
+                        .district(rec.getDistrict())
+                        .state(rec.getState())
                         .build()));
 
-        // Find Crop
-        Crop crop = cropRepository.findByNameIgnoreCase(commodityName)
+        // Find or create Crop
+        Crop crop = cropRepository.findByNameIgnoreCase(rec.getCommodity())
                 .orElseGet(() -> cropRepository.save(Crop.builder()
-                        .name(commodityName)
+                        .name(rec.getCommodity())
                         .category("PERISHABLE")
                         .perishabilityDays(7)
                         .standardUnit("kg")
                         .build()));
 
-        // Freshness Check
+        // Quality check
         String qualityStatus = "VERIFIED";
-        if (arrivalDate.isBefore(LocalDate.now().minusDays(2))) {
+        long daysOld = ChronoUnit.DAYS.between(rec.getArrivalDate(), LocalDate.now());
+        if (daysOld > 2) {
             qualityStatus = "STALE";
         }
 
-        String sourceUrl = rec.containsKey("source_url") ? (String) rec.get("source_url") : "https://agmarknet.gov.in";
+        // Deduplication & Upsert
+        Optional<MarketPrice> existing = marketPriceRepository
+                .findByMarketIdAndCropIdAndArrivalDateAndVarietyName(market.getId(), crop.getId(), rec.getArrivalDate(), rec.getVariety());
 
-        // Save or Update Market Price record
-        Optional<MarketPrice> existingPrice = marketPriceRepository
-                .findByMarketIdAndCropIdAndArrivalDateAndVarietyName(market.getId(), crop.getId(), arrivalDate, variety);
-
-        if (existingPrice.isPresent()) {
-            MarketPrice mp = existingPrice.get();
+        if (existing.isPresent()) {
+            MarketPrice mp = existing.get();
             mp.setMinPricePerKg(minKg);
             mp.setMaxPricePerKg(maxKg);
             mp.setModalPricePerKg(modalKg);
             mp.setDataQualityStatus(qualityStatus);
-            mp.setSourceIdentifier(sourceUrl);
+            mp.setSourceIdentifier(rec.getSourceUrl());
             marketPriceRepository.save(mp);
         } else {
             marketPriceRepository.save(MarketPrice.builder()
                     .market(market)
                     .crop(crop)
-                    .varietyName(variety)
+                    .varietyName(rec.getVariety())
                     .minPricePerKg(minKg)
                     .maxPricePerKg(maxKg)
                     .modalPricePerKg(modalKg)
-                    .arrivalDate(arrivalDate)
+                    .arrivalDate(rec.getArrivalDate())
                     .dataSourceName("AGMARKNET")
-                    .sourceIdentifier(sourceUrl)
+                    .sourceIdentifier(rec.getSourceUrl())
                     .dataQualityStatus(qualityStatus)
                     .build());
         }
+    }
+
+    private BigDecimal normalizeToKg(BigDecimal price, String unit) {
+        if (price == null) return BigDecimal.ZERO;
+        if ("Quintal".equalsIgnoreCase(unit) || "quintals".equalsIgnoreCase(unit)) {
+            return price.divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+        } else if ("Tonne".equalsIgnoreCase(unit) || "Ton".equalsIgnoreCase(unit)) {
+            return price.divide(new BigDecimal("1000"), 2, RoundingMode.HALF_UP);
+        }
+        return price.setScale(2, RoundingMode.HALF_UP);
     }
 }
