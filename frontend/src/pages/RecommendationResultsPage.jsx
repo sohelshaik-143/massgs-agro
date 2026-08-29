@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { recommendationApi } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 import {
   Sparkles, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight,
-  TrendingUp, ShieldCheck, MapPin, Database, Sliders, ExternalLink, RefreshCw
+  TrendingUp, ShieldCheck, MapPin, Database, Sliders, ExternalLink, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 export default function RecommendationResultsPage() {
   const { listingId } = useParams();
+  const { t, language } = useLanguage();
   const [recommendation, setRecommendation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     loadRecommendation();
@@ -25,7 +28,7 @@ export default function RecommendationResultsPage() {
       })
       .catch((err) => {
         console.error('Error fetching recommendation:', err);
-        setError('Failed to load recommendation. Please verify the listing ID.');
+        setError(language === 'en' ? 'Failed to load recommendation. Please verify the listing.' : 'నివేదిక లోడ్ చేయడం విఫలమైంది. దయచేసి వివరాలను తనిఖీ చేయండి.');
         setLoading(false);
       });
   };
@@ -34,8 +37,8 @@ export default function RecommendationResultsPage() {
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
         <div className="inline-block w-10 h-10 border-4 border-agri-600 border-t-transparent rounded-full animate-spin"></div>
-        <h2 className="text-xl font-bold text-slate-900">Evaluating Available Verified Options...</h2>
-        <p className="text-sm text-slate-500">Querying AGMARKNET prices, calculating transport costs, handling fees, and perishability factors.</p>
+        <h2 className="text-xl font-bold text-slate-900">{language === 'en' ? 'Calculating your best option...' : 'మీకు అత్యంత లాభదాయకమైన ఎంపికను లెక్కిస్తోంది...'}</h2>
+        <p className="text-sm text-slate-500">{language === 'en' ? 'Comparing nearby APMC mandis, transport costs, and storage factors.' : 'సమీప మార్కెట్లు, రవాణా ఖర్చులు, నిల్వ సౌకర్యాలను విశ్లేషిస్తోంది.'}</p>
       </div>
     );
   }
@@ -44,10 +47,10 @@ export default function RecommendationResultsPage() {
     return (
       <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-4 bg-white rounded-3xl border border-earth-200 mt-8">
         <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
-        <h2 className="text-xl font-bold text-slate-900">Unable to Load Recommendation</h2>
-        <p className="text-sm text-slate-600">{error || 'No recommendation found.'}</p>
+        <h2 className="text-xl font-bold text-slate-900">{language === 'en' ? 'Unable to Load Recommendation' : 'నివేదిక అందుబాటులో లేదు'}</h2>
+        <p className="text-sm text-slate-600">{error || (language === 'en' ? 'No recommendation found.' : 'నివేదిక వివరాలు లభించలేదు.')}</p>
         <Link to="/dashboard" className="inline-block px-5 py-2.5 rounded-xl bg-agri-800 text-white text-sm font-semibold">
-          Return to Dashboard
+          {t('backToHome')}
         </Link>
       </div>
     );
@@ -57,225 +60,238 @@ export default function RecommendationResultsPage() {
   const isLimited = recommendation.recommendationState === 'LIMITED_CONFIDENCE';
   const isNoData = recommendation.recommendationState === 'NO_RELIABLE_RECOMMENDATION';
 
+  const getStatusBadge = () => {
+    if (isRecommended) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+          {t('liveBadge')}
+        </span>
+      );
+    } else if (isLimited) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+          {t('staleBadge')}
+        </span>
+      );
+    } else {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-50 text-slate-800 border border-slate-200">
+          {t('unavailableBadge')}
+        </span>
+      );
+    }
+  };
+
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      {/* Top Banner State */}
-      <div
-        className={`p-6 rounded-3xl border shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
-          isRecommended
-            ? 'bg-emerald-50/80 border-emerald-300'
-            : isLimited
-            ? 'bg-amber-50/80 border-amber-300'
-            : 'bg-slate-100 border-slate-300'
-        }`}
-      >
-        <div className="flex items-start space-x-3">
-          <div
-            className={`p-2.5 rounded-2xl shrink-0 mt-0.5 ${
-              isRecommended ? 'bg-emerald-200 text-emerald-900' : isLimited ? 'bg-amber-200 text-amber-900' : 'bg-slate-300 text-slate-800'
-            }`}
-          >
-            {isRecommended ? <CheckCircle2 className="w-6 h-6" /> : isLimited ? <AlertTriangle className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
-          </div>
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      
+      {/* Top Main Result Card */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-earth-200 shadow-sm space-y-6">
+        
+        {/* Simple Summary Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-earth-100">
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/80 text-slate-800 border">
-                State: {recommendation.recommendationState}
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                {t('bestOptionLabel')}
               </span>
-              <span className="text-xs font-semibold text-slate-600">
-                Confidence: {recommendation.confidenceScore}%
-              </span>
+              {getStatusBadge()}
             </div>
+            
             <h1 className="text-2xl font-black text-slate-900 mt-1">
-              {isRecommended
-                ? 'Strongest Verified Selling Option Found'
-                : isLimited
-                ? 'Recommendation Available (Limited Confidence)'
-                : 'Reliable Data Currently Unavailable'}
+              {isNoData ? (
+                t('unavailableBadge')
+              ) : (
+                recommendation.recommendedOptionType === 'MANDI_SALE'
+                  ? `${recommendation.recommendedMarketName} Mandi`
+                  : recommendation.recommendedBuyerName
+              )}
             </h1>
-            <p className="text-sm text-slate-700 mt-1">{recommendation.explanationSummary}</p>
+
+            {!isNoData && (
+              <p className="text-xs text-slate-500 mt-1 flex items-center font-medium">
+                <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400 animate-bounce" />
+                {recommendation.recommendedMarketDistrict || 'Direct Partner'}
+              </p>
+            )}
+          </div>
+
+          <div className="shrink-0 font-bold bg-earth-50 px-3.5 py-1.5 rounded-xl border border-earth-200 text-xs">
+            {t('cropLabel')}: <span className="text-agri-950 font-black">{recommendation.cropName}</span> ({recommendation.quantityKg} kg)
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 shrink-0">
-          <Link
-            to={`/simulator?listingId=${listingId}`}
-            className="inline-flex items-center px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-800 text-xs font-bold hover:bg-slate-50 transition shadow-sm"
-          >
-            <Sliders className="w-3.5 h-3.5 mr-1.5 text-agri-700" />
-            What-If Simulator
-          </Link>
+        {/* Clear Final Income Estimate */}
+        {!isNoData && (
+          <div className="bg-emerald-500/5 rounded-2xl p-6 border border-emerald-500/20 text-center space-y-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+              {language === 'en' ? 'Estimated Earnings (Net In-Hand)' : 'మీ చేతికి వచ్చే నికర విలువ (అంచనా)'}
+            </span>
+            <div className="text-3xl sm:text-4xl font-black text-emerald-950">
+              {recommendation.expectedNetRealization ? (
+                `₹${Number(recommendation.expectedNetRealization).toLocaleString('en-IN')}`
+              ) : (
+                <span className="text-amber-800 text-lg">Unavailable</span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              {language === 'en' 
+                ? 'Calculated after removing transport, APMC mandi fees, and storage costs.' 
+                : 'రవాణా, మండి ఫీజులు మరియు నిల్వ ఖర్చులు తీసివేసిన తర్వాత లెక్కించబడింది.'}
+            </p>
+          </div>
+        )}
+
+        {/* Overview cards of parameters */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-3 bg-earth-50 rounded-xl border border-earth-200">
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">{t('cropLabel')}</span>
+            <strong className="text-xs text-slate-800 block mt-0.5">{recommendation.cropName}</strong>
+          </div>
+          <div className="p-3 bg-earth-50 rounded-xl border border-earth-200">
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">{t('quantityLabel')}</span>
+            <strong className="text-xs text-slate-800 block mt-0.5">{recommendation.quantityKg} kg</strong>
+          </div>
+          <div className="p-3 bg-earth-50 rounded-xl border border-earth-200">
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">{t('todaysPriceLabel')}</span>
+            <strong className="text-xs text-slate-800 block mt-0.5">₹{recommendation.grossRevenue ? (recommendation.grossRevenue / recommendation.quantityKg).toFixed(2) : '0.00'}/kg</strong>
+          </div>
+          <div className="p-3 bg-earth-50 rounded-xl border border-earth-200">
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">{t('sourceStatus')}</span>
+            <strong className="text-xs text-slate-800 block mt-0.5 uppercase">{recommendation.recommendationState}</strong>
+          </div>
         </div>
+
+        {/* Simple Explanation ("WHY?") Section */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-extrabold text-slate-800 flex items-center">
+            <Sparkles className="w-4 h-4 mr-1 text-emerald-600" />
+            {t('whyThisOption')}
+          </h3>
+          <div className="space-y-2">
+            {recommendation.detailedReasons?.map((reason, idx) => (
+              <div key={idx} className="p-3.5 rounded-xl bg-earth-50/50 border border-earth-200/60 text-xs text-slate-700 leading-relaxed font-medium">
+                • {reason}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Toggle Details Button */}
+        <div className="pt-2 text-center">
+          <button
+            type="button"
+            onClick={() => setShowDetails(!showDetails)}
+            className="inline-flex items-center text-xs font-bold text-agri-700 hover:text-agri-800 focus:outline-none"
+          >
+            <span>{showDetails ? t('hideDetailsBtn') : t('detailsBtn')}</span>
+            {showDetails ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+          </button>
+        </div>
+
       </div>
 
-      {/* Main Net Realization vs Gross Revenue Card */}
-      {!isNoData && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Option Detail */}
-          <div className="lg:col-span-2 bg-white rounded-3xl p-6 sm:p-8 border border-earth-200 shadow-sm space-y-6">
-            <div className="flex justify-between items-start pb-4 border-b border-earth-100">
-              <div>
-                <span className="text-xs font-bold uppercase text-agri-700">Recommended Channel</span>
-                <h2 className="text-2xl font-extrabold text-slate-900 mt-0.5">
-                  {recommendation.recommendedOptionType === 'MANDI_SALE'
-                    ? `${recommendation.recommendedMarketName} APMC Mandi`
-                    : recommendation.recommendedBuyerName}
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5 flex items-center">
-                  <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                  {recommendation.recommendedMarketDistrict || 'Direct Platform Partner'}
-                </p>
-              </div>
-
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-agri-100 text-agri-800">
-                {recommendation.cropName} ({recommendation.quantityKg} kg)
-              </span>
-            </div>
-
-            {/* Financial Numbers */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-4 rounded-2xl bg-earth-50 border border-earth-200">
-                <span className="text-xs font-semibold text-slate-500">Gross Selling Revenue</span>
-                <div className="text-2xl font-black text-slate-900 mt-1">
-                  ₹{recommendation.grossRevenue ? Number(recommendation.grossRevenue).toLocaleString('en-IN') : '0.00'}
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">Before transport, storage & market deductions</p>
-              </div>
-
-              <div
-                className={`p-4 rounded-2xl border ${
-                  recommendation.expectedNetRealization
-                    ? 'bg-emerald-50/80 border-emerald-300'
-                    : 'bg-amber-50/80 border-amber-300'
-                }`}
-              >
-                <span className="text-xs font-bold text-slate-700">Expected Net Realization</span>
-                <div className="text-2xl font-black text-slate-900 mt-1">
-                  {recommendation.expectedNetRealization ? (
-                    `₹${Number(recommendation.expectedNetRealization).toLocaleString('en-IN')}`
-                  ) : (
-                    <span className="text-amber-800 text-lg">Unavailable</span>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-600 mt-0.5">
-                  {recommendation.expectedNetRealization
-                    ? 'Estimated final earnings in farmer account'
-                    : 'Requires verified transport quote to calculate reliably'}
-                </p>
-              </div>
-            </div>
-
-            {/* Cost Breakdown Table */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-bold text-slate-800">Deterministic Cost Breakdown</h3>
-              <div className="bg-earth-50 rounded-2xl p-4 border border-earth-200 divide-y divide-earth-200 text-xs">
-                <div className="flex justify-between py-2">
-                  <span className="text-slate-600">Handling Fee (₹0.30/kg):</span>
-                  <span className="font-semibold text-slate-900">− ₹{recommendation.estimatedHandlingCost || '0.00'}</span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-slate-600">APMC Mandi Cess (1%):</span>
-                  <span className="font-semibold text-slate-900">
-                    − ₹{recommendation.grossRevenue ? (recommendation.grossRevenue * 0.01).toFixed(2) : '0.00'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-slate-600">Verified Transportation Cost:</span>
-                  <span className={`font-semibold ${recommendation.transportCostAvailable ? 'text-slate-900' : 'text-amber-800'}`}>
-                    {recommendation.transportCostAvailable
-                      ? `− ₹${recommendation.estimatedTransportCost}`
-                      : 'Quote Unavailable (Not assumed ₹0)'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-slate-600">Storage & Perishability Loss:</span>
-                  <span className="font-semibold text-slate-900">− ₹{recommendation.estimatedPerishabilityLoss || '0.00'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Explainability "WHY?" Card */}
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-earth-200 shadow-sm flex flex-col justify-between space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2 text-agri-800">
-                <Sparkles className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-lg font-bold text-slate-900">Why this recommendation?</h3>
-              </div>
-
-              <div className="space-y-3">
-                {recommendation.detailedReasons?.map((reason, idx) => (
-                  <div key={idx} className="p-3 rounded-xl bg-earth-50 border border-earth-200 text-xs text-slate-700 leading-relaxed">
-                    {reason}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-earth-100 space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Provenance & Trust</span>
-              <p className="text-xs text-slate-500">
-                Data extracted directly from Government AGMARKNET daily feeds. Algorithm version {recommendation.algorithmVersion || 'v1.0.0'}.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Data Source Provenance Details */}
-      {recommendation.sources?.length > 0 && (
-        <div className="bg-white rounded-3xl p-6 border border-earth-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center">
-              <Database className="w-4 h-4 mr-2 text-agri-700" />
-              Verified Data Provenance
+      {/* Advanced Details Panel (Progressive Disclosure) */}
+      {showDetails && !isNoData && (
+        <div className="space-y-6 transition duration-300">
+          
+          {/* Cost Deductions details */}
+          <div className="bg-white rounded-3xl p-6 border border-earth-200 shadow-sm space-y-4">
+            <h3 className="text-sm font-extrabold text-slate-900">
+              {language === 'en' ? 'Deduction Formula Math' : 'ధర తగ్గింపుల లెక్కలు'}
             </h3>
-            <span className="text-xs text-slate-500">Traceable Data Records</span>
+            <div className="bg-earth-50 rounded-2xl p-4 border border-earth-200 divide-y divide-earth-200 text-xs space-y-1">
+              <div className="flex justify-between py-2.5">
+                <span className="text-slate-600">{language === 'en' ? 'Gross Selling Revenue' : 'మొత్తం అమ్మకం రాబడి'}:</span>
+                <span className="font-bold text-slate-950">₹{recommendation.grossRevenue ? Number(recommendation.grossRevenue).toLocaleString('en-IN') : '0.00'}</span>
+              </div>
+              <div className="flex justify-between py-2.5">
+                <span className="text-slate-600">{language === 'en' ? 'Handling Fee (₹0.30 / kg)' : 'నిర్వహణ రుసుము (కిలోకు ₹0.30)'}:</span>
+                <span className="font-bold text-rose-800">− ₹{recommendation.estimatedHandlingCost || '0.00'}</span>
+              </div>
+              <div className="flex justify-between py-2.5">
+                <span className="text-slate-600">{language === 'en' ? 'APMC Mandi Cess (1%)' : 'మండి ఫీజు (1%)'}:</span>
+                <span className="font-bold text-rose-800">
+                  − ₹{recommendation.grossRevenue ? (recommendation.grossRevenue * 0.01).toFixed(2) : '0.00'}
+                </span>
+              </div>
+              <div className="flex justify-between py-2.5">
+                <span className="text-slate-600">{language === 'en' ? 'Transportation Cost' : 'రవాణా ఖర్చు'}:</span>
+                <span className={`font-bold ${recommendation.transportCostAvailable ? 'text-rose-800' : 'text-amber-800'}`}>
+                  {recommendation.transportCostAvailable
+                    ? `− ₹${recommendation.estimatedTransportCost}`
+                    : 'Quote Unavailable (Official route not found)'}
+                </span>
+              </div>
+              <div className="flex justify-between py-2.5">
+                <span className="text-slate-600">{language === 'en' ? 'Storage & Perishability Loss' : 'నిల్వ మరియు నాణ్యత నష్టం'}:</span>
+                <span className="font-bold text-rose-800">− ₹{recommendation.estimatedPerishabilityLoss || '0.00'}</span>
+              </div>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-earth-50 text-slate-600 border-b border-earth-200">
-                <tr>
-                  <th className="py-2.5 px-3 font-bold">Data Source</th>
-                  <th className="py-2.5 px-3 font-bold">Mandi / Market</th>
-                  <th className="py-2.5 px-3 font-bold">Quality Status</th>
-                  <th className="py-2.5 px-3 font-bold">Timestamp</th>
-                  <th className="py-2.5 px-3 font-bold">Official URL</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-earth-100 text-slate-700">
-                {recommendation.sources.map((src, i) => (
-                  <tr key={i}>
-                    <td className="py-2.5 px-3 font-semibold text-agri-900">{src.dataSourceName}</td>
-                    <td className="py-2.5 px-3">{src.mandiName}</td>
-                    <td className="py-2.5 px-3">
-                      <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
-                        {src.dataQualityStatus}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3">{new Date(src.fetchedAt).toLocaleString()}</td>
-                    <td className="py-2.5 px-3">
-                      {src.provenanceUrl ? (
-                        <a
-                          href={src.provenanceUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-agri-700 hover:underline inline-flex items-center"
-                        >
-                          Source Link <ExternalLink className="w-3 h-3 ml-1" />
-                        </a>
-                      ) : (
-                        <span className="text-slate-400">Official AGMARKNET Feed</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* Verification Provenance Table */}
+          {recommendation.sources?.length > 0 && (
+            <div className="bg-white rounded-3xl p-6 border border-earth-200 shadow-sm space-y-4">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center">
+                <Database className="w-4 h-4 mr-2 text-agri-700" />
+                {t('dataTransparency')}
+              </h3>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-earth-50 text-slate-600 border-b border-earth-200">
+                    <tr>
+                      <th className="py-2.5 px-3 font-bold">Data Source</th>
+                      <th className="py-2.5 px-3 font-bold">APMC Mandi</th>
+                      <th className="py-2.5 px-3 font-bold">Freshness</th>
+                      <th className="py-2.5 px-3 font-bold">Timestamp</th>
+                      <th className="py-2.5 px-3 font-bold">Official URL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-earth-100 text-slate-700">
+                    {recommendation.sources.map((src, i) => (
+                      <tr key={i}>
+                        <td className="py-2.5 px-3 font-semibold text-agri-900">{src.dataSourceName}</td>
+                        <td className="py-2.5 px-3">{src.mandiName}</td>
+                        <td className="py-2.5 px-3">
+                          <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold uppercase text-[10px]">
+                            {src.dataQualityStatus}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">{new Date(src.fetchedAt).toLocaleString()}</td>
+                        <td className="py-2.5 px-3">
+                          {src.provenanceUrl ? (
+                            <a
+                              href={src.provenanceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-agri-700 hover:underline inline-flex items-center"
+                            >
+                              Source Link <ExternalLink className="w-3 h-3 ml-1" />
+                            </a>
+                          ) : (
+                            <span className="text-slate-400">AGMARKNET Official feed</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
+
+      {/* Return Button */}
+      <div className="text-center pt-2">
+        <Link to="/" className="inline-flex items-center px-6 py-3 rounded-2xl bg-agri-800 text-white text-xs font-bold hover:bg-agri-950 transition shadow-sm">
+          {t('backToHome')}
+        </Link>
+      </div>
+
     </div>
   );
 }

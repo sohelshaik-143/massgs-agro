@@ -31,6 +31,12 @@ export const farmerApi = {
 export const marketApi = {
   getPrices: (crop, state) => apiClient.get('/markets/prices', { params: { crop, state } }),
   compareMarkets: (cropName) => apiClient.get('/markets/compare', { params: { cropName } }),
+  getApDistricts: () => apiClient.get('/markets/ap-districts'),
+  getMandis: (district) => apiClient.get('/markets/mandis', { params: { district } }),
+  getCrops: () => apiClient.get('/markets/crops'),
+  getLatestRates: (district, mandiName) => apiClient.get('/markets/latest-rates', { params: { district, mandiName } }),
+  getLastUpdateStatus: () => apiClient.get('/markets/last-update-status'),
+  searchCrops: (query) => apiClient.get('/markets/crops/search', { params: { query } }),
 };
 
 export const recommendationApi = {

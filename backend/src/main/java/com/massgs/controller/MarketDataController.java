@@ -24,6 +24,9 @@ public class MarketDataController {
     private final MarketPriceRepository marketPriceRepository;
     private final CropRepository cropRepository;
     private final AgmarknetIngestionService ingestionService;
+    private final com.massgs.repository.MarketRepository marketRepository;
+    private final com.massgs.repository.DataSourceRepository dataSourceRepository;
+    private final com.massgs.repository.DataIngestionRunRepository dataIngestionRunRepository;
 
     @GetMapping("/prices")
     public ResponseEntity<List<MarketPriceItem>> getVerifiedMarketPrices(
@@ -106,6 +109,123 @@ public class MarketDataController {
                 "status", "VERIFIED",
                 "cropName", cropName,
                 "markets", items
+        ));
+    }
+
+    @GetMapping("/ap-districts")
+    public ResponseEntity<List<String>> getApDistricts() {
+        List<String> districts = marketRepository.findByStateOrderByMandiNameAsc("Andhra Pradesh")
+                .stream()
+                .map(com.massgs.entity.Market::getDistrict)
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(districts);
+    }
+
+    @GetMapping("/mandis")
+    public ResponseEntity<List<com.massgs.entity.Market>> getMandis(
+            @RequestParam(required = false) String district) {
+        List<com.massgs.entity.Market> mandis;
+        if (district != null && !district.isBlank()) {
+            mandis = marketRepository.findByDistrictOrderByMandiNameAsc(district);
+        } else {
+            mandis = marketRepository.findByStateOrderByMandiNameAsc("Andhra Pradesh");
+        }
+        return ResponseEntity.ok(mandis);
+    }
+
+    @GetMapping("/crops")
+    public ResponseEntity<List<Crop>> getCrops() {
+        return ResponseEntity.ok(cropRepository.findAll());
+    }
+
+    @GetMapping("/crops/search")
+    public ResponseEntity<List<Crop>> searchCrops(@RequestParam String query) {
+        if (query == null || query.isBlank()) {
+            return ResponseEntity.ok(Collections.emptyList());
+        }
+        
+        String cleanQuery = query.trim().toLowerCase();
+        
+        // Define simple Telugu/English translation mappings
+        Map<String, String> synonyms = new HashMap<>();
+        synonyms.put("టమోటా", "tomato");
+        synonyms.put("టమాటో", "tomato");
+        synonyms.put("టమో", "tomato");
+        synonyms.put("ఉల్లిపాయ", "onion");
+        synonyms.put("ఉల్లి", "onion");
+        synonyms.put("మిరప", "chilli");
+        synonyms.put("మిరపకాయ", "chilli");
+        synonyms.put("మిర్చి", "chilli");
+        synonyms.put("బియ్యం", "rice");
+        synonyms.put("వరి", "rice");
+        synonyms.put("ప్యాడీ", "rice");
+        synonyms.put("పత్తి", "cotton");
+        synonyms.put("మొక్కజొన్న", "maize");
+        synonyms.put("పసుపు", "turmeric");
+        synonyms.put("వేరుశనగ", "groundnut");
+
+        // Check if query is in Telugu synonym map
+        final String mappedQuery = synonyms.entrySet().stream()
+                .filter(entry -> cleanQuery.contains(entry.getKey()) || entry.getKey().contains(cleanQuery))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(cleanQuery);
+
+        List<Crop> matchingCrops = cropRepository.findAll().stream()
+                .filter(crop -> crop.getName().toLowerCase().contains(cleanQuery) 
+                             || crop.getName().toLowerCase().contains(mappedQuery))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(matchingCrops);
+    }
+
+    @GetMapping("/latest-rates")
+    public ResponseEntity<List<MarketPriceItem>> getLatestRates(
+            @RequestParam(required = false) String district,
+            @RequestParam(required = false) String mandiName) {
+        List<MarketPrice> prices = marketPriceRepository.findAll();
+        
+        List<MarketPriceItem> items = prices.stream()
+                .filter(p -> "Andhra Pradesh".equalsIgnoreCase(p.getMarket().getState()))
+                .filter(p -> district == null || district.isBlank() || district.equalsIgnoreCase(p.getMarket().getDistrict()))
+                .filter(p -> mandiName == null || mandiName.isBlank() || mandiName.equalsIgnoreCase(p.getMarket().getMandiName()))
+                .map(p -> MarketPriceItem.builder()
+                        .id(p.getId())
+                        .mandiName(p.getMarket().getMandiName())
+                        .district(p.getMarket().getDistrict())
+                        .state(p.getMarket().getState())
+                        .cropName(p.getCrop().getName())
+                        .varietyName(p.getVarietyName())
+                        .minPricePerKg(p.getMinPricePerKg())
+                        .maxPricePerKg(p.getMaxPricePerKg())
+                        .modalPricePerKg(p.getModalPricePerKg())
+                        .arrivalDate(p.getArrivalDate())
+                        .dataSourceName(p.getDataSourceName())
+                        .sourceIdentifier(p.getSourceIdentifier())
+                        .dataQualityStatus(p.getDataQualityStatus())
+                        .freshnessDays(Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(p.getArrivalDate(), LocalDate.now())))
+                        .build())
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(items);
+    }
+
+    @GetMapping("/last-update-status")
+    public ResponseEntity<Map<String, Object>> getLastUpdateStatus() {
+        Optional<com.massgs.entity.DataSourceInfo> sourceOpt = dataSourceRepository.findByName("AGMARKNET");
+        if (sourceOpt.isEmpty()) {
+            return ResponseEntity.ok(Map.of(
+                    "status", "DATA_UNAVAILABLE",
+                    "timestamp", "N/A"
+            ));
+        }
+        com.massgs.entity.DataSourceInfo info = sourceOpt.get();
+        return ResponseEntity.ok(Map.of(
+                "status", info.getStatus(),
+                "timestamp", info.getLastSuccessfulIngestion() != null ? info.getLastSuccessfulIngestion().toString() : "N/A",
+                "totalRecords", info.getTotalRecordCount()
         ));
     }
 
