@@ -33,8 +33,25 @@ public class ProduceListing {
     @Column(name = "quantity_kg", nullable = false)
     private BigDecimal quantityKg;
 
+    @Column(name = "quantity_unit")
+    @Builder.Default
+    private String quantityUnit = "kg"; // kg, quintal, tonne, bag_50kg
+
+    @Column(name = "expected_price_per_unit")
+    private BigDecimal expectedPricePerUnit;
+
+    @Column(name = "price_unit")
+    @Builder.Default
+    private String priceUnit = "kg"; // kg, quintal
+
     @Column(name = "ready_date", nullable = false)
     private LocalDate readyDate;
+
+    @Column(name = "location_village")
+    private String locationVillage;
+
+    @Column(name = "location_mandal")
+    private String locationMandal;
 
     @Column(name = "location_district", nullable = false)
     private String locationDistrict;
@@ -43,10 +60,18 @@ public class ProduceListing {
     private String locationState;
 
     @Column(name = "quality_grade")
-    private String qualityGrade; // A, B, C
+    @Builder.Default
+    private String qualityGrade = "A"; // A, B, C
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "photo_url", length = 500)
+    private String photoUrl;
 
     @Column(nullable = false)
-    private String status; // AVAILABLE, AGGREGATED, SOLD, EXPIRED
+    @Builder.Default
+    private String status = "AVAILABLE"; // AVAILABLE, NEGOTIATING, SOLD, EXPIRED
 
     @Column(name = "user_provided_transport_cost_per_kg")
     private BigDecimal userProvidedTransportCostPerKg;
@@ -63,6 +88,12 @@ public class ProduceListing {
         this.updatedAt = LocalDateTime.now();
         if (this.status == null) {
             this.status = "AVAILABLE";
+        }
+        if (this.quantityUnit == null) {
+            this.quantityUnit = "kg";
+        }
+        if (this.priceUnit == null) {
+            this.priceUnit = "kg";
         }
     }
 

@@ -17,6 +17,9 @@ public class Farmer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "massgs_id", nullable = false, unique = true, length = 30)
+    private String massgsId;
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
@@ -27,10 +30,12 @@ public class Farmer {
     @Column(nullable = false)
     private String state;
 
+    private String mandal;
     private String village;
 
     @Column(name = "preferred_language")
-    private String preferredLanguage;
+    @Builder.Default
+    private String preferredLanguage = "en";
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

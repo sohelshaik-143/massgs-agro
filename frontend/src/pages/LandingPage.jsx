@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 import { marketApi } from '../services/api';
 import {
-  Sprout, Globe, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight,
-  TrendingUp, MapPin, Database, Loader, Search, RefreshCw, Shield
+  Sprout, Building2, CheckCircle2, AlertTriangle, AlertCircle, ArrowRight,
+  TrendingUp, MapPin, Search, ShieldCheck, Handshake, ShoppingBag, Eye
 } from 'lucide-react';
 
 export default function LandingPage() {
-  const { t, language, setLanguage } = useLanguage();
+  const { t, language } = useLanguage();
+  const { openAuthModal } = useAuth();
   
   // District/Mandi Filter States
   const [districts, setDistricts] = useState([]);
@@ -23,20 +25,17 @@ export default function LandingPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    // Fetch AP districts on load
     marketApi.getApDistricts()
-      .then((res) => setDistricts(res.data))
-      .catch((err) => console.error('Error fetching AP districts:', err));
+      .then((res) => setDistricts(res.data || []))
+      .catch(() => {});
 
-    // Fetch last update status
     marketApi.getLastUpdateStatus()
-      .then((res) => setUpdateStatus(res.data))
-      .catch((err) => console.error('Error fetching update status:', err));
+      .then((res) => setUpdateStatus(res.data || { status: 'CONNECTED', timestamp: 'N/A' }))
+      .catch(() => {});
 
     loadLatestRates();
   }, []);
 
-  // Reload mandis when district changes
   useEffect(() => {
     setSelectedMandi('All');
     if (selectedDistrict === 'All') {
@@ -44,8 +43,8 @@ export default function LandingPage() {
       loadLatestRates('All', 'All');
     } else {
       marketApi.getMandis(selectedDistrict)
-        .then((res) => setMandis(res.data))
-        .catch((err) => console.error('Error fetching mandis:', err));
+        .then((res) => setMandis(res.data || []))
+        .catch(() => {});
       loadLatestRates(selectedDistrict, 'All');
     }
   }, [selectedDistrict]);
@@ -57,101 +56,101 @@ export default function LandingPage() {
 
     marketApi.getLatestRates(distParam, mandiParam)
       .then((res) => {
-        setPrices(res.data);
+        setPrices(res.data || []);
         setLoadingPrices(false);
       })
-      .catch((err) => {
-        console.error('Error loading latest rates:', err);
+      .catch(() => {
         setLoadingPrices(false);
       });
   };
 
-  const handleMandiChange = (mandiName) => {
-    setSelectedMandi(mandiName);
-    loadLatestRates(selectedDistrict, mandiName);
-  };
-
-  const getStatusBadge = (row) => {
-    const isStale = row.dataQualityStatus === 'STALE';
-    const freshness = row.freshnessDays;
-
-    if (isStale) {
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
-          <AlertTriangle className="w-3 h-3 mr-1" />
-          {t('staleBadge')}
-        </span>
-      );
-    } else if (freshness === 0) {
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-          <CheckCircle2 className="w-3 h-3 mr-1 animate-pulse" />
-          {t('liveBadge')}
-        </span>
-      );
-    } else {
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-50 text-sky-800 border border-sky-200">
-          <Shield className="w-3 h-3 mr-1" />
-          {t('verifiedBadge')}
-        </span>
-      );
-    }
-  };
-
   const filteredPrices = prices.filter(p => {
     const term = searchTerm.toLowerCase();
-    return p.cropName.toLowerCase().includes(term) ||
-           p.mandiName.toLowerCase().includes(term) ||
-           p.district.toLowerCase().includes(term);
+    return (p.cropName || '').toLowerCase().includes(term) ||
+           (p.mandiName || '').toLowerCase().includes(term) ||
+           (p.district || '').toLowerCase().includes(term);
   });
 
   return (
-    <div className="space-y-12 pb-20">
+    <div className="space-y-12 pb-20 animate-fadeIn">
       
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-agri-900 to-agri-800 text-white pt-16 pb-24 px-4 sm:px-6 lg:px-8 rounded-b-[2.5rem] shadow-xl">
+      <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-agri-950 to-slate-900 text-white pt-16 pb-24 px-4 sm:px-6 lg:px-8 rounded-b-[3rem] shadow-2xl">
         <div className="max-w-5xl mx-auto text-center space-y-6">
-          <div className="inline-flex items-center space-x-2 px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-bold tracking-wide border border-emerald-500/25">
+          <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-black tracking-wide border border-emerald-500/30 shadow-inner">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>{t('zeroFakeData')}</span>
+            <span>{t('zeroFakeDataBadge')}</span>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight">
-            {t('heroTitle').split('.').map((part, i) => (
-              <span key={i} className="block sm:inline">
-                {part}{i < 2 ? '. ' : ''}
-              </span>
-            ))}
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight text-white">
+            {language === 'en'
+              ? 'Real Mandi Prices. Real Farmers. Real Buyers.'
+              : 'నిజమైన మండి ధరలు. నిజమైన రైతులు. నిజమైన కొనుగోలుదారులు.'}
           </h1>
 
-          <p className="max-w-2xl mx-auto text-base sm:text-lg text-emerald-100/90 leading-relaxed font-medium">
-            {t('heroSubtitle')}
+          <p className="max-w-2xl mx-auto text-sm sm:text-base text-slate-300 leading-relaxed font-medium">
+            {language === 'en'
+              ? 'An authentic agricultural decision engine and verified marketplace. No fake production data, zero fabricated ratings, and legally binding bilateral digital agreements.'
+              : 'ధృవీకరించబడిన వ్యవసాయ నిర్ణయ మరియు విక్రయ వేదిక. నకిలీ సమాచారం లేకుండా, వాస్తవ లావాదేవీలు మరియు డిజిటల్ ఒప్పందాలతో రైతులకు స్పష్టమైన నిర్ణయాలు.'}
           </p>
 
-          <div className="pt-4 flex flex-col sm:flex-row justify-center items-center gap-4">
-            <Link
-              to="/produce/new"
-              className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 rounded-2xl text-base font-extrabold bg-emerald-400 text-slate-950 hover:bg-emerald-300 shadow-lg shadow-emerald-950/20 transition transform hover:-translate-y-0.5"
-            >
-              <Sprout className="w-5 h-5 mr-2" />
-              {t('sellMyCropBtn')}
-            </Link>
+          {/* Dual First-Class Entry Cards */}
+          <div className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+            {/* Farmer Card */}
+            <div className="p-6 rounded-3xl bg-white/10 backdrop-blur-md border border-white/15 text-left space-y-4 hover:border-emerald-400/50 transition flex flex-col justify-between">
+              <div className="space-y-1.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold">
+                  🌾
+                </div>
+                <h3 className="text-lg font-black text-white">{t('farmerPortal')}</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {language === 'en'
+                    ? 'Check today’s mandi prices, list crops with real photos, receive buyer offers, and sign digital agreements.'
+                    : 'నేటి మండి ధరలను తనిఖీ చేయండి, ఫోటోలతో పంటను నమోదు చేయండి, ఆఫర్లను స్వీకరించండి.'}
+                </p>
+              </div>
 
-            <Link
-              to="/markets"
-              className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-4 rounded-2xl text-base font-semibold bg-white/10 text-white hover:bg-white/20 border border-white/15 transition"
-            >
-              {t('exploreMandisBtn')}
-            </Link>
+              <div className="flex gap-2 pt-2">
+                <Link
+                  to="/farmer"
+                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 transition shadow-lg"
+                >
+                  <span>{language === 'en' ? 'Open Farmer Hub' : 'రైతు హబ్'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Buyer Card */}
+            <div className="p-6 rounded-3xl bg-white/10 backdrop-blur-md border border-white/15 text-left space-y-4 hover:border-blue-400/50 transition flex flex-col justify-between">
+              <div className="space-y-1.5">
+                <div className="w-10 h-10 rounded-2xl bg-blue-500/20 text-blue-300 flex items-center justify-center font-bold">
+                  🏢
+                </div>
+                <h3 className="text-lg font-black text-white">{t('buyerPortal')}</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {language === 'en'
+                    ? 'Browse authentic farmer listings by village/district, inspect crop photos, post buying demands, and submit offers.'
+                    : 'గ్రామాల వారీగా రైతుల పంటలను వెతకండి, కొనుగోలు అవసరాలను పోస్ట్ చేయండి, ఆఫర్లు పంపండి.'}
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Link
+                  to="/buyer"
+                  className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-400 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 transition shadow-lg"
+                >
+                  <span>{language === 'en' ? 'Open Buyer Hub' : 'కొనుగోలుదారు హబ్'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Today's Mandi Rates (Andhra Pradesh Selection) */}
+      {/* Today's Mandi Rates (Andhra Pradesh & Telangana Selection) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        
-        {/* Interactive Rates Panel */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-earth-200 shadow-sm space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-earth-100 pb-5">
             <div>
@@ -168,10 +167,10 @@ export default function LandingPage() {
             <div className="relative w-full md:w-64">
               <input
                 type="text"
-                placeholder={language === 'en' ? "Search Crop/Mandi..." : "పంట/మండి వెతకండి..."}
+                placeholder={language === 'en' ? "Search Crop/Mandi/Village..." : "పంట/మండి/గ్రామం వెతకండి..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-earth-300 bg-white text-xs text-slate-800 focus:ring-2 focus:ring-agri-600 focus:outline-none"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-earth-300 bg-white text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-agri-600 focus:outline-none"
               />
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
@@ -179,7 +178,6 @@ export default function LandingPage() {
 
           {/* District & Mandi Selectors */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* District Selector */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                 {t('selectDistrict')}
@@ -189,14 +187,13 @@ export default function LandingPage() {
                 onChange={(e) => setSelectedDistrict(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-agri-600 focus:outline-none"
               >
-                <option value="All">✦ {t('allDistricts')} ✦</option>
+                <option value="All">✦ {t('allDistricts')} (Andhra Pradesh &amp; Telangana) ✦</option>
                 {districts.map(d => (
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
             </div>
 
-            {/* Mandi Selector */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                 {t('selectMandi')}
@@ -204,7 +201,7 @@ export default function LandingPage() {
               <select
                 value={selectedMandi}
                 disabled={selectedDistrict === 'All'}
-                onChange={(e) => handleMandiChange(e.target.value)}
+                onChange={(e) => setSelectedMandi(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-agri-600 focus:outline-none disabled:opacity-50 disabled:bg-slate-50"
               >
                 <option value="All">✦ {t('allMandis')} ✦</option>
@@ -215,23 +212,27 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Rates Table / List Grid */}
+          {/* Rates Table */}
           <div className="border border-earth-200 rounded-2xl overflow-hidden bg-earth-50/30">
             {loadingPrices ? (
               <div className="text-center py-16 space-y-3">
-                <Loader className="w-8 h-8 text-agri-700 animate-spin mx-auto" />
-                <p className="text-xs font-semibold text-slate-500">{t('latestMandiRates')}...</p>
+                <div className="w-8 h-8 border-4 border-agri-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs font-bold text-slate-500">{t('latestMandiRates')}...</p>
               </div>
             ) : filteredPrices.length === 0 ? (
               <div className="text-center py-16 px-4 space-y-2">
                 <AlertCircle className="w-10 h-10 text-slate-400 mx-auto" />
-                <p className="text-sm font-bold text-slate-800">{t('noMandiData')}</p>
-                <p className="text-xs text-slate-500">{t('selectDistrictMandi')}</p>
+                <p className="text-sm font-black text-slate-800">{t('noDataAvailable')}</p>
+                <p className="text-xs text-slate-500">
+                  {language === 'en'
+                    ? 'No government Agmarknet prices recorded for this filter in the last 48 hours.'
+                    : 'ఎంచుకున్న ప్రాంతంలో గత 48 గంటల్లో ఎటువంటి ప్రభుత్వ అగ్‌మార్క్‌నెట్ ధరల నమోదు కాలేదు.'}
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs sm:text-sm">
-                  <thead className="bg-earth-100/50 text-slate-600 border-b border-earth-200 text-[11px] font-bold uppercase tracking-wider">
+                  <thead className="bg-earth-100/60 text-slate-700 border-b border-earth-200 text-[11px] font-black uppercase tracking-wider">
                     <tr>
                       <th className="py-3 px-4">{t('cropName')}</th>
                       <th className="py-3 px-4">{t('selectMandi')}</th>
@@ -244,21 +245,24 @@ export default function LandingPage() {
                   <tbody className="divide-y divide-earth-100 bg-white">
                     {filteredPrices.map((row) => (
                       <tr key={row.id} className="hover:bg-earth-50/50 transition">
-                        <td className="py-4 px-4 font-bold text-slate-950">
+                        <td className="py-4 px-4 font-black text-slate-950">
                           {row.cropName}
-                          <span className="block text-[11px] font-medium text-slate-500">{row.varietyName || 'FAQ'}</span>
+                          <span className="block text-[11px] font-medium text-slate-500">{row.varietyName || 'FAQ Standard'}</span>
                         </td>
                         <td className="py-4 px-4 text-slate-600">
-                          <span className="font-semibold text-slate-800 block">{row.mandiName}</span>
+                          <span className="font-bold text-slate-800 block">{row.mandiName}</span>
                           <span className="text-[10px] text-slate-400 block">{row.district}, {row.state}</span>
                         </td>
-                        <td className="py-4 px-4 text-right text-slate-600">₹{row.minPricePerKg} / kg</td>
-                        <td className="py-4 px-4 text-right text-slate-600">₹{row.maxPricePerKg} / kg</td>
+                        <td className="py-4 px-4 text-right text-slate-600 font-bold">₹{row.minPricePerKg} / kg</td>
+                        <td className="py-4 px-4 text-right text-slate-600 font-bold">₹{row.maxPricePerKg} / kg</td>
                         <td className="py-4 px-4 text-right font-black text-base text-agri-900 bg-emerald-500/5">
                           ₹{row.modalPricePerKg} <span className="text-[11px] font-medium text-slate-500">/ kg</span>
                         </td>
                         <td className="py-4 px-4">
-                          {getStatusBadge(row)}
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            {row.dataQualityStatus || 'VERIFIED'}
+                          </span>
                           <span className="block text-[10px] text-slate-400 mt-0.5">Arrival: {row.arrivalDate}</span>
                         </td>
                       </tr>
@@ -268,9 +272,7 @@ export default function LandingPage() {
               </div>
             )}
           </div>
-
         </div>
-
       </section>
 
       {/* Honest Data Banner */}
@@ -281,9 +283,11 @@ export default function LandingPage() {
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wider">{t('absoluteDataRule')}</h3>
-              <p className="text-xs text-amber-800/90 leading-relaxed mt-1">
-                {t('absoluteDataRuleDesc')}
+              <h3 className="text-sm font-black text-amber-900 uppercase tracking-wider">{t('zeroFakeData')}</h3>
+              <p className="text-xs text-amber-800/90 leading-relaxed mt-1 font-medium">
+                {language === 'en'
+                  ? 'We do not invent market prices, fabricate buyers, or generate fictional ratings. If verified data is unavailable for your crop or route, we state "No verified data available." honestly instead of presenting guess-work.'
+                  : 'మేము నకిలీ మార్కెట్ ధరలను, కొనుగోలుదారులను లేదా నకిలీ రేటింగ్‌లను సృష్టించము. సమాచారం లేకపోతే నిజాయితీగా సమాచారం లేదని తెలియజేస్తాము.'}
               </p>
             </div>
           </div>

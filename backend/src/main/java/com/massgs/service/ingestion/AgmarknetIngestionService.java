@@ -29,8 +29,6 @@ public class AgmarknetIngestionService {
     private final MarketPriceRepository marketPriceRepository;
     private final AgmarknetLiveApiDataProvider liveApiDataProvider;
     private final TransportQuoteRepository transportQuoteRepository;
-    private final BuyerRepository buyerRepository;
-    private final BuyerRequirementRepository buyerRequirementRepository;
 
     @Value("${agmarknet.ingestion.stale-threshold-hours:48}")
     private int staleThresholdHours;
@@ -39,10 +37,8 @@ public class AgmarknetIngestionService {
     public void initDataSources() {
         try {
             ensureDataSourceExists();
-            ensureSeedCrops();
             ensureSeedTransportQuotes();
-            ensureSeedBuyers();
-            // Automatically ingest authentic data on startup so system is ready
+            // Automatically ingest authentic AGMARKNET data on startup so system is ready with verified rates
             ingestMarketData(null, null);
         } catch (Exception e) {
             log.error("Failed to initialize Agmarknet data sources", e);
@@ -60,25 +56,6 @@ public class AgmarknetIngestionService {
                         .totalRecordCount(0)
                         .staleRecordCount(0)
                         .build()));
-    }
-
-    @Transactional
-    public void ensureSeedCrops() {
-        createCropIfMissing("Tomato", "PERISHABLE", 5);
-        createCropIfMissing("Onion", "SEMI_PERISHABLE", 30);
-        createCropIfMissing("Chilli", "SEMI_PERISHABLE", 60);
-        createCropIfMissing("Rice", "STAPLE", 180);
-    }
-
-    private void createCropIfMissing(String name, String category, int perishabilityDays) {
-        if (cropRepository.findByNameIgnoreCase(name).isEmpty()) {
-            cropRepository.save(Crop.builder()
-                    .name(name)
-                    .category(category)
-                    .perishabilityDays(perishabilityDays)
-                    .standardUnit("kg")
-                    .build());
-        }
     }
 
     @Transactional
@@ -105,36 +82,6 @@ public class AgmarknetIngestionService {
                     .transitTimeHours(hours)
                     .verifiedProviderName(provider)
                     .build());
-        }
-    }
-
-    @Transactional
-    public void ensureSeedBuyers() {
-        if (buyerRepository.count() == 0) {
-            Buyer buyer = buyerRepository.save(Buyer.builder()
-                    .organizationName("ITC Agri Business Division")
-                    .buyerType("INSTITUTIONAL")
-                    .verifiedStatus("VERIFIED_PLATFORM")
-                    .contactEmail("procurement@itc-agri.in")
-                    .contactPhone("+91 80 2345 6789")
-                    .provenanceIndicator("ITC e-Choupal Procurement Contract #ITC-2026-AP")
-                    .build());
-
-            Optional<Crop> chilliOpt = cropRepository.findByNameIgnoreCase("Chilli");
-            if (chilliOpt.isPresent()) {
-                buyerRequirementRepository.save(BuyerRequirement.builder()
-                        .buyer(buyer)
-                        .crop(chilliOpt.get())
-                        .minQuantityKg(new BigDecimal("500"))
-                        .maxQuantityKg(new BigDecimal("10000"))
-                        .targetPricePerKg(new BigDecimal("192.00"))
-                        .targetDistrict("Guntur")
-                        .targetState("Andhra Pradesh")
-                        .qualitySpecs("Red Chilli Grade A, Moisture < 10%")
-                        .validUntil(LocalDate.now().plusDays(30))
-                        .status("ACTIVE")
-                        .build());
-            }
         }
     }
 

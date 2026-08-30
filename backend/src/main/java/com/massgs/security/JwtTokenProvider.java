@@ -25,12 +25,23 @@ public class JwtTokenProvider {
     }
 
     public String generateToken(Authentication authentication) {
-        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+        String email;
+        if (authentication.getPrincipal() instanceof UserPrincipal up) {
+            email = up.getEmail();
+        } else if (authentication.getPrincipal() instanceof String s) {
+            email = s;
+        } else {
+            email = authentication.getName();
+        }
+        return generateTokenFromEmail(email);
+    }
+
+    public String generateTokenFromEmail(String email) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
 
         return Jwts.builder()
-                .subject(userPrincipal.getEmail())
+                .subject(email)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey(), Jwts.SIG.HS256)
@@ -47,6 +58,9 @@ public class JwtTokenProvider {
     }
 
     public boolean validateToken(String authToken) {
+        if (authToken == null || authToken.isBlank()) {
+            return false;
+        }
         try {
             Jwts.parser().verifyWith(getSigningKey()).build().parseSignedClaims(authToken);
             return true;

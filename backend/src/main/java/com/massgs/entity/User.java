@@ -17,6 +17,9 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "massgs_id", nullable = false, unique = true, length = 30)
+    private String massgsId; // e.g. MASSGS-F-849201, MASSGS-B-310492
+
     @Column(nullable = false, unique = true)
     private String email;
 
@@ -27,10 +30,19 @@ public class User {
     private String fullName;
 
     @Column(nullable = false)
-    private String role; // ROLE_FARMER, ROLE_BUYER, ROLE_AGGREGATOR, ROLE_ADMIN
+    private String role; // ROLE_FARMER, ROLE_BUYER, ROLE_ADMIN
 
     @Column(name = "phone_number")
     private String phoneNumber;
+
+    @Column(name = "is_phone_verified")
+    @Builder.Default
+    private Boolean isPhoneVerified = false;
+
+    private String village;
+    private String mandal;
+    private String district;
+    private String state;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

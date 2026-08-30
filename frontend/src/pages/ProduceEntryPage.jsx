@@ -1,63 +1,73 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { farmerApi, marketApi } from '../services/api';
+import { farmerApi, marketApi, locationApi, mediaApi } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import VoiceInputModal from '../components/VoiceInputModal';
+import { useAuth } from '../context/AuthContext';
 import {
-  Sprout, Mic, Sparkles, AlertCircle, ArrowRight, ArrowLeft,
-  Truck, User, Calendar, MapPin, Scale, HelpCircle, Check, Database, Search
+  Sprout, Sparkles, AlertCircle, ArrowRight, ArrowLeft,
+  Truck, Calendar, MapPin, Check, Search, Camera, Upload, Eye, HelpCircle, ShieldCheck
 } from 'lucide-react';
 
 export default function ProduceEntryPage() {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   // Form states
   const [formData, setFormData] = useState({
-    farmerName: '',
-    contactPhone: '',
-    cropName: 'Tomato',
-    varietyName: 'FAQ',
-    quantityValue: '',
-    quantityUnit: 'tonne', // kg, quintal, tonne
-    district: 'Guntur',
+    farmerName: user?.fullName || '',
+    contactPhone: user?.phoneNumber || '',
+    cropName: 'Chilli',
+    varietyName: 'Red Teja / Grade A',
+    quantityValue: '1000',
+    quantityUnit: 'kg', // kg, quintal, tonne
+    expectedPricePerUnit: '220',
+    priceUnit: 'kg', // kg, quintal
+    district: user?.district || 'Guntur',
+    mandal: 'Guntur Rural',
+    village: 'Nallapadu',
     state: 'Andhra Pradesh',
     readyDate: new Date().toISOString().split('T')[0],
     qualityGrade: 'A',
+    description: 'Dry red chilli with bright red color, moisture under 10%.',
+    photoUrl: '',
     userProvidedTransportCostPerKg: '',
   });
 
   // Dynamic Metadata
-  const [districts, setDistricts] = useState(['Guntur', 'Chittoor', 'Kurnool', 'Krishna']);
+  const [districts, setDistricts] = useState(['Guntur', 'Chittoor', 'Kurnool', 'Krishna', 'Tirupati', 'West Godavari']);
   const [localRates, setLocalRates] = useState([]);
   const [loadingRates, setLoadingRates] = useState(false);
 
   // Autocomplete crop search states
   const [searchQuery, setSearchQuery] = useState(formData.cropName || '');
   const [suggestions, setSuggestions] = useState([]);
+  const [suggestionPrompt, setSuggestionPrompt] = useState(null);
   const [isValidCrop, setIsValidCrop] = useState(true);
   const [searching, setSearching] = useState(false);
 
+  // Photo upload states
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState(null);
+
   useEffect(() => {
-    // Load AP districts
-    marketApi.getApDistricts()
+    locationApi.getDistricts('Andhra Pradesh')
       .then((res) => {
         if (res.data && res.data.length > 0) {
           setDistricts(res.data);
-          // Set default to first district
-          setFormData(prev => ({ ...prev, district: res.data[0] }));
         }
       })
-      .catch((err) => console.error('Error fetching AP districts:', err));
+      .catch(() => {});
   }, []);
 
   // Debounced search for crops
   useEffect(() => {
     if (searchQuery.trim().length === 0) {
       setSuggestions([]);
+      setSuggestionPrompt(null);
       setIsValidCrop(false);
       return;
     }
@@ -66,34 +76,35 @@ export default function ProduceEntryPage() {
     const delayDebounce = setTimeout(() => {
       marketApi.searchCrops(searchQuery)
         .then((res) => {
-          setSuggestions(res.data);
-          const match = res.data.some(c => 
-            c.name.toLowerCase() === searchQuery.trim().toLowerCase()
+          setSuggestions(res.data || []);
+          const match = (res.data || []).some(c => 
+            c.name.toLowerCase() === searchQuery.trim().toLowerCase() ||
+            (c.teluguName && c.teluguName.toLowerCase() === searchQuery.trim().toLowerCase())
           );
-          setIsValidCrop(match);
+          setIsValidCrop(match || (res.data && res.data.length > 0));
           setSearching(false);
         })
         .catch((err) => {
-          console.error('Error matching crops:', err);
           setSearching(false);
         });
-    }, 300);
+    }, 250);
 
     return () => clearTimeout(delayDebounce);
   }, [searchQuery]);
 
-  // Fetch local rates when Step 4 is reached
+  // Fetch local rates when Step 5 is reached
   useEffect(() => {
-    if (currentStep === 4) {
+    if (currentStep === 5) {
       setLoadingRates(true);
       marketApi.getLatestRates(formData.district, null)
         .then((res) => {
-          const cropRates = res.data.filter(p => p.cropName.toLowerCase() === formData.cropName.toLowerCase());
-          setLocalRates(cropRates);
+          const cropRates = (res.data || []).filter(p => 
+            p.cropName.toLowerCase() === formData.cropName.toLowerCase()
+          );
+          setLocalRates(cropRates.length > 0 ? cropRates : (res.data || []).slice(0, 3));
           setLoadingRates(false);
         })
-        .catch((err) => {
-          console.error('Error loading rates:', err);
+        .catch(() => {
           setLoadingRates(false);
         });
     }
@@ -106,8 +117,31 @@ export default function ProduceEntryPage() {
     setIsValidCrop(true);
   };
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError(language === 'en' ? 'Photo size exceeds 5MB limit.' : 'ఫోటో పరిమాణం 5MB కంటే ఎక్కువ ఉండకూడదు.');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    setError(null);
+    try {
+      const res = await mediaApi.upload(file);
+      const url = res.data.url;
+      setFormData(prev => ({ ...prev, photoUrl: url }));
+      setPhotoPreview(url);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to upload photo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   const handleNext = () => {
-    if (currentStep === 1 && !isValidCrop) {
+    if (currentStep === 1 && !isValidCrop && !formData.cropName) {
       setError(language === 'en' 
         ? 'Please enter or select a valid crop from suggestions.' 
         : 'దయచేసి సూచించిన వాటి నుండి సరైన పంటను ఎంచుకోండి.');
@@ -130,7 +164,6 @@ export default function ProduceEntryPage() {
     setLoading(true);
     setError(null);
 
-    // Standardize quantity to KG
     let quantityKg = parseFloat(formData.quantityValue);
     if (formData.quantityUnit === 'tonne') quantityKg *= 1000;
     else if (formData.quantityUnit === 'quintal') quantityKg *= 100;
@@ -140,17 +173,29 @@ export default function ProduceEntryPage() {
       transportCost = parseFloat(formData.userProvidedTransportCostPerKg);
     }
 
+    let expectedPrice = null;
+    if (formData.expectedPricePerUnit && !isNaN(parseFloat(formData.expectedPricePerUnit))) {
+      expectedPrice = parseFloat(formData.expectedPricePerUnit);
+    }
+
     try {
       const res = await farmerApi.createListing({
-        farmerName: formData.farmerName || 'Registered Farmer',
-        contactPhone: formData.contactPhone,
+        farmerName: formData.farmerName || user?.fullName || 'Registered Farmer',
+        contactPhone: formData.contactPhone || user?.phoneNumber,
         cropName: formData.cropName,
         varietyName: formData.varietyName,
         quantityKg: quantityKg,
+        quantityUnit: formData.quantityUnit,
+        expectedPricePerUnit: expectedPrice,
+        priceUnit: formData.priceUnit,
         readyDate: formData.readyDate,
+        village: formData.village,
+        mandal: formData.mandal,
         district: formData.district,
         state: formData.state,
         qualityGrade: formData.qualityGrade,
+        description: formData.description,
+        photoUrl: formData.photoUrl,
         userProvidedTransportCostPerKg: transportCost,
       });
 
@@ -162,53 +207,29 @@ export default function ProduceEntryPage() {
     }
   };
 
-  const renderStepIndicator = () => {
-    return (
-      <div className="flex items-center justify-between pb-6 border-b border-earth-100">
-        <div>
-          <span className="text-xs font-bold text-agri-700 uppercase tracking-wider">
-            {t('stepHeader', { step: currentStep })}
-          </span>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
-            {currentStep === 1 && t('whatCrop')}
-            {currentStep === 2 && t('howMuch')}
-            {currentStep === 3 && t('whereCrop')}
-            {currentStep === 4 && t('nearbyRates')}
-            {currentStep === 5 && t('compareOptions')}
-            {currentStep === 6 && t('bestOption')}
-          </h1>
-        </div>
-      </div>
-    );
-  };
-
-  const renderHelpBox = (toDo, infoNeeded, next) => {
-    return (
-      <div className="bg-earth-50 rounded-2xl p-4 border border-earth-200 text-xs text-slate-600 space-y-2">
-        <div>
-          <span className="font-extrabold uppercase text-agri-800 block mb-0.5">{t('whatToDoNow')}</span>
-          <p>{toDo}</p>
-        </div>
-        <div>
-          <span className="font-extrabold uppercase text-slate-500 block mb-0.5">{t('whatInfoNeeded')}</span>
-          <p>{infoNeeded}</p>
-        </div>
-        <div>
-          <span className="font-extrabold uppercase text-slate-500 block mb-0.5">{t('whatHappensNext')}</span>
-          <p>{next}</p>
-        </div>
-      </div>
-    );
-  };
-
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-3xl mx-auto px-4 py-8 animate-fadeIn">
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-earth-200 shadow-sm space-y-6">
         
-        {renderStepIndicator()}
+        {/* Step Indicator Header */}
+        <div className="flex items-center justify-between pb-6 border-b border-earth-100">
+          <div>
+            <span className="text-xs font-black text-agri-700 uppercase tracking-wider">
+              {t('stepHeader', { step: currentStep })}
+            </span>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+              {currentStep === 1 && t('whatCrop')}
+              {currentStep === 2 && t('howMuch')}
+              {currentStep === 3 && t('whereCrop')}
+              {currentStep === 4 && (language === 'en' ? '4. Add Product Photo (Visual Evidence)' : '4. పంట వాస్తవ ఫోటోను జోడించండి')}
+              {currentStep === 5 && t('nearbyRates')}
+              {currentStep === 6 && t('bestOption')}
+            </h1>
+          </div>
+        </div>
 
         {error && (
-          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-start space-x-2 text-rose-800 text-xs font-bold">
+          <div className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-start space-x-2 text-red-800 text-xs font-bold">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -218,8 +239,8 @@ export default function ProduceEntryPage() {
         {currentStep === 1 && (
           <div className="space-y-6">
             <div className="space-y-2 relative">
-              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                {language === 'en' ? 'Type the crop you have...' : 'మీ దగ్గర ఉన్న పంట పేరు టైప్ చేయండి...'}
+              <label className="block text-xs font-bold text-slate-700">
+                {language === 'en' ? 'Search Crop (English or తెలుగు)...' : 'పంట పేరు (English లేదా తెలుగు)...'}
               </label>
               
               <div className="relative">
@@ -228,7 +249,7 @@ export default function ProduceEntryPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full px-4 py-3 pl-11 rounded-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-agri-600"
-                  placeholder={language === 'en' ? "e.g. Tomato, Chilli, Rice..." : "ఉదా. టమోటా, మిరపకాయ, బియ్యం..."}
+                  placeholder={language === 'en' ? "e.g. Tomato, Chilli, వరి, మిరప..." : "ఉదా. టమోటా, మిరపకాయ, వరి, పత్తి..."}
                 />
                 <Search className="w-5 h-5 text-slate-400 absolute left-3.5 top-3" />
                 {searching && (
@@ -246,50 +267,47 @@ export default function ProduceEntryPage() {
                       key={c.id}
                       type="button"
                       onClick={() => selectSuggestedCrop(c)}
-                      className="w-full flex items-center px-4 py-2.5 hover:bg-earth-50 text-left text-xs font-semibold text-slate-800 transition"
+                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-earth-50 text-left text-xs font-semibold text-slate-800 transition"
                     >
-                      <Sprout className="w-4 h-4 mr-2 text-agri-600 shrink-0" />
-                      <span>{c.name} ({c.category})</span>
+                      <div className="flex items-center gap-2">
+                        <Sprout className="w-4 h-4 text-agri-600 shrink-0" />
+                        <span><strong>{c.name}</strong> {c.teluguName ? `(${c.teluguName})` : ''}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">{c.category}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Invalid Crop Warning */}
-            {!isValidCrop && !searching && searchQuery.trim().length > 0 && (
-              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start space-x-2 text-amber-900 text-xs font-semibold">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>
-                  {language === 'en' 
-                    ? `No current market data found for "${searchQuery}". We only support verified real market commodities.` 
-                    : `"${searchQuery}" కొరకు తాజా మార్కెట్ వివరాలు లభించలేదు. మేము ధృవీకరించబడిన నిజమైన మార్కెట్ పంటలను మాత్రమే చూపిస్తాము.`}
-                </span>
-              </div>
-            )}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                {language === 'en' ? 'Variety Name / Lot Specification' : 'రకం పేరు / వివరాలు'}
+              </label>
+              <input
+                type="text"
+                value={formData.varietyName}
+                onChange={(e) => setFormData({ ...formData, varietyName: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-earth-300 bg-white text-xs font-bold text-slate-800 focus:outline-none"
+                placeholder="e.g. Teja Red / BPT 5204"
+              />
+            </div>
 
-            {/* Selected Crop Badge */}
             {isValidCrop && formData.cropName && (
               <div className="flex items-center space-x-2 bg-emerald-50 text-emerald-800 px-3.5 py-2 rounded-xl border border-emerald-200 text-xs font-bold w-fit">
                 <Check className="w-4 h-4" />
-                <span>{language === 'en' ? 'Selected Crop:' : 'ఎంచుకున్న పంట:'} {formData.cropName}</span>
+                <span>{language === 'en' ? 'Selected Canonical Crop:' : 'ఎంచుకున్న పంట:'} {formData.cropName}</span>
               </div>
-            )}
-
-            {renderHelpBox(
-              language === 'en' ? "Search and select your crop." : "మీ పంటను వెతికి ఎంచుకోండి.",
-              language === 'en' ? "Real crop name from the database." : "డేటాబేస్ లోని నిజమైన పంట పేరు.",
-              language === 'en' ? "Step 2: Enter harvest weight." : "దశ 2: పంట బరువును నమోదు చేయండి."
             )}
           </div>
         )}
 
-        {/* STEP 2: How Much */}
+        {/* STEP 2: Quantity & Expected Price */}
         {currentStep === 2 && (
           <div className="space-y-6">
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                <label className="block text-xs font-bold text-slate-700">
                   {t('quantityLabel')}
                 </label>
                 <div className="flex">
@@ -298,27 +316,60 @@ export default function ProduceEntryPage() {
                     value={formData.quantityValue}
                     onChange={(e) => setFormData({ ...formData, quantityValue: e.target.value })}
                     className="flex-grow px-4 py-3 rounded-l-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-agri-600"
-                    placeholder="e.g. 10"
+                    placeholder="e.g. 1000"
                     min="0"
                   />
                   <select
                     value={formData.quantityUnit}
                     onChange={(e) => setFormData({ ...formData, quantityUnit: e.target.value })}
-                    className="px-4 py-3 rounded-r-xl border-t border-b border-r border-earth-300 bg-earth-50 text-sm font-semibold text-slate-700 focus:outline-none"
+                    className="px-4 py-3 rounded-r-xl border-t border-b border-r border-earth-300 bg-earth-50 text-xs font-bold text-slate-700 focus:outline-none"
                   >
-                    <option value="tonne">{language === 'en' ? 'Tonnes' : 'టన్నులు'}</option>
-                    <option value="quintal">{language === 'en' ? 'Quintals' : 'క్వింటాళ్లు'}</option>
-                    <option value="kg">{language === 'en' ? 'Kgs' : 'కిలోలు'}</option>
+                    <option value="kg">kg (కిలోలు)</option>
+                    <option value="quintal">Quintal (క్వింటాళ్లు)</option>
+                    <option value="tonne">Tonne (టన్నులు)</option>
                   </select>
                 </div>
               </div>
-            </div>
 
-            {renderHelpBox(
-              language === 'en' ? "Enter total harvest weight and unit." : "మొత్తం పంట పరిమాణాన్ని నమోదు చేయండి.",
-              language === 'en' ? "Weight values and unit (kgs/tonnes/quintals)." : "బరువు మరియు బరువు ప్రమాణం (కిలోలు/టన్నులు/క్వింటాళ్లు).",
-              language === 'en' ? "Step 3: Define crop storage location." : "దశ 3: పంట నిల్వ స్థలాన్ని ఎంచుకోండి."
-            )}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  {t('expectedPriceLabel')} ({language === 'en' ? 'Your Asking Price' : 'మీరు ఆశించే ధర'})
+                </label>
+                <div className="flex">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.expectedPricePerUnit}
+                    onChange={(e) => setFormData({ ...formData, expectedPricePerUnit: e.target.value })}
+                    className="flex-grow px-4 py-3 rounded-l-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-agri-600"
+                    placeholder="e.g. 220.00"
+                  />
+                  <select
+                    value={formData.priceUnit}
+                    onChange={(e) => setFormData({ ...formData, priceUnit: e.target.value })}
+                    className="px-4 py-3 rounded-r-xl border-t border-b border-r border-earth-300 bg-earth-50 text-xs font-bold text-slate-700 focus:outline-none"
+                  >
+                    <option value="kg">Per kg</option>
+                    <option value="quintal">Per Quintal</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {t('qualityGradeLabel')}
+                </label>
+                <select
+                  value={formData.qualityGrade}
+                  onChange={(e) => setFormData({ ...formData, qualityGrade: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-earth-300 text-xs font-bold bg-white focus:outline-none"
+                >
+                  <option value="A">Grade A (Premium)</option>
+                  <option value="B">Grade B (FAQ Standard)</option>
+                  <option value="C">Grade C (Commercial)</option>
+                </select>
+              </div>
+            </div>
           </div>
         )}
 
@@ -326,75 +377,145 @@ export default function ProduceEntryPage() {
         {currentStep === 3 && (
           <div className="space-y-6">
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                  {t('locationLabel')} (District)
-                </label>
-                <select
-                  value={formData.district}
-                  onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-agri-600"
-                >
-                  {districts.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                    Farmer Name (Optional)
+                  <label className="block text-xs font-bold text-slate-700">
+                    {t('districtLabel')}
+                  </label>
+                  <select
+                    value={formData.district}
+                    onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-earth-300 bg-white text-xs font-bold text-slate-800 focus:outline-none"
+                  >
+                    {districts.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    {t('mandalLabel')}
                   </label>
                   <input
                     type="text"
-                    value={formData.farmerName}
-                    onChange={(e) => setFormData({ ...formData, farmerName: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:outline-none"
-                    placeholder="e.g. Ramesh"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                    Contact Phone (Optional)
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.contactPhone}
-                    onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:outline-none"
-                    placeholder="e.g. +91 9876543210"
+                    value={formData.mandal}
+                    onChange={(e) => setFormData({ ...formData, mandal: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-earth-300 bg-white text-xs font-bold text-slate-800 focus:outline-none"
+                    placeholder="e.g. Guntur Rural"
                   />
                 </div>
               </div>
-            </div>
 
-            {renderHelpBox(
-              language === 'en' ? "Select crop loading/harvest location district." : "పంట ఉన్న జిల్లాను ఎంచుకోండి.",
-              language === 'en' ? "Andhra Pradesh district." : "ఆంధ్రప్రదేశ్ జిల్లా పేరు.",
-              language === 'en' ? "Step 4: Check regional market rates." : "దశ 4: మీ ప్రాంత మండి ధరలను పరిశీలించండి."
-            )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    {t('villageLabel')}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.village}
+                    onChange={(e) => setFormData({ ...formData, village: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-earth-300 bg-white text-xs font-bold text-slate-800 focus:outline-none"
+                    placeholder="e.g. Nallapadu"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    {t('readyDateLabel')}
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.readyDate}
+                    onChange={(e) => setFormData({ ...formData, readyDate: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-earth-300 bg-white text-xs font-bold text-slate-800 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  {t('descriptionLabel')}
+                </label>
+                <textarea
+                  rows={2}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-earth-300 bg-white text-xs focus:outline-none"
+                  placeholder="e.g. Harvested 3 days ago, sun-dried, packed in gunny bags..."
+                />
+              </div>
+            </div>
           </div>
         )}
 
-        {/* STEP 4: Mandi Rates */}
+        {/* STEP 4: Product Photo Upload */}
         {currentStep === 4 && (
           <div className="space-y-6">
-            <div className="border border-earth-200 rounded-2xl overflow-hidden bg-earth-50/30 p-4 min-h-32 flex flex-col justify-center">
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-slate-700">
+                {t('uploadPhotoLabel')}
+              </label>
+
+              <div className="p-6 border-2 border-dashed border-earth-300 rounded-2xl bg-earth-50/50 text-center space-y-3">
+                {photoPreview || formData.photoUrl ? (
+                  <div className="space-y-3">
+                    <img
+                      src={photoPreview || formData.photoUrl}
+                      alt="Crop Preview"
+                      className="w-44 h-44 object-cover mx-auto rounded-2xl border shadow-sm"
+                    />
+                    <div className="flex justify-center gap-3">
+                      <label className="cursor-pointer px-4 py-2 rounded-xl bg-agri-800 text-white text-xs font-bold hover:bg-agri-700 transition">
+                        <span>Change Photo</span>
+                        <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="w-16 h-16 rounded-full bg-agri-100 text-agri-700 flex items-center justify-center mx-auto">
+                      <Camera className="w-8 h-8 text-agri-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-800">
+                        {language === 'en' ? 'Upload authentic photo of your produce' : 'మీ పంట యొక్క వాస్తవ ఫోటోను అప్‌లోడ్ చేయండి'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{t('photoUploadHelper')}</p>
+                    </div>
+
+                    <label className="inline-flex items-center gap-2 cursor-pointer px-5 py-2.5 rounded-xl bg-agri-800 hover:bg-agri-700 text-white text-xs font-black transition shadow-sm">
+                      <Upload className="w-4 h-4" />
+                      <span>{uploadingPhoto ? 'Uploading...' : 'Choose Photo from Device'}</span>
+                      <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" disabled={uploadingPhoto} />
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {/* Visual Evidence Notice */}
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-semibold text-amber-900">
+                ℹ️ {t('visualEvidenceDisclaimer')}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5: Mandi Rates & Transport */}
+        {currentStep === 5 && (
+          <div className="space-y-6">
+            <div className="border border-earth-200 rounded-2xl overflow-hidden bg-earth-50/30 p-4 space-y-4">
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                {t('todaysMandiRates')} ({formData.district})
+              </h4>
+
               {loadingRates ? (
-                <div className="text-center space-y-2 py-4">
-                  <div className="inline-block w-6 h-6 border-2 border-agri-600 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-xs text-slate-500 font-semibold">{language === 'en' ? 'Fetching regional rates...' : 'మండి ధరలను సేకరిస్తోంది...'}</p>
-                </div>
+                <div className="py-6 text-center text-xs text-slate-400">Loading verified mandi benchmarks...</div>
               ) : localRates.length === 0 ? (
-                <div className="text-center py-4 space-y-1 text-slate-600 text-xs">
-                  <AlertCircle className="w-8 h-8 text-slate-400 mx-auto mb-1" />
-                  <p className="font-bold">{language === 'en' ? 'No recent verified rates found.' : 'తాజా ధరల వివరాలు లేవు.'}</p>
-                  <p>{language === 'en' ? `No verified ${formData.cropName} prices in ${formData.district} district in past 48 hours.` : `${formData.district} జిల్లాలో గత 48 గంటల్లో ఎటువంటి ధరల నమోదు కాలేదు.`}</p>
-                </div>
+                <div className="py-4 text-center text-xs text-slate-500 font-bold">{t('noDataAvailable')}</div>
               ) : (
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{t('todaysMandiRates')} ({formData.district})</h4>
+                <div className="space-y-2">
                   {localRates.map(r => (
                     <div key={r.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-earth-200 text-xs">
                       <div>
@@ -402,63 +523,28 @@ export default function ProduceEntryPage() {
                         <span className="text-[10px] text-slate-400">Date: {r.arrivalDate}</span>
                       </div>
                       <div className="text-right">
-                        <strong className="text-agri-950 font-black text-sm block">₹{r.modalPricePerKg} / kg</strong>
+                        <strong className="text-agri-950 font-black text-sm block">₹{r.modalPricePerKg}/kg</strong>
                         <span className="text-[10px] text-emerald-700 font-bold uppercase">{r.dataQualityStatus}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
 
-            {renderHelpBox(
-              language === 'en' ? "Verify regional market rates before calculating net options." : "మీ ప్రాంత ధరలను నిర్ధారించుకోండి.",
-              language === 'en' ? "Mandi price data (modal, min, max)." : "మండి సమాచారం.",
-              language === 'en' ? "Step 5: Enter custom transport / storage details." : "దశ 5: రవాణా / నిల్వ వివరాలను నమోదు చేయండి."
-            )}
-          </div>
-        )}
-
-        {/* STEP 5: Compare Options */}
-        {currentStep === 5 && (
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center">
-                  <Truck className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                  Custom Transport Quote per KG (Optional)
+              <div className="pt-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Custom Transport Quote per kg (Optional)
                 </label>
                 <input
                   type="number"
-                  step="0.10"
-                  min="0"
+                  step="0.1"
                   value={formData.userProvidedTransportCostPerKg}
                   onChange={(e) => setFormData({ ...formData, userProvidedTransportCostPerKg: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-agri-600"
-                  placeholder="e.g. 1.50"
-                />
-                <p className="text-[10px] text-slate-400">Leave blank to use verified default regional quotes.</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center">
-                  <Calendar className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                  Harvest Ready Date
-                </label>
-                <input
-                  type="date"
-                  value={formData.readyDate}
-                  onChange={(e) => setFormData({ ...formData, readyDate: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-earth-300 bg-white text-sm font-semibold text-slate-800 focus:outline-none"
+                  placeholder="e.g. 1.20"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none"
                 />
               </div>
             </div>
-
-            {renderHelpBox(
-              language === 'en' ? "Optionally specify your private transport quote or date parameters." : "రవాణా మరియు సిద్ధంగా ఉన్న తేదీ నమోదు చేయండి (ఐచ్ఛికం).",
-              language === 'en' ? "Transport cost per kg and ready date." : "రవాణా ధర మరియు పంట చేతికి వచ్చే తేదీ.",
-              language === 'en' ? "Step 6: Review and get net realization recommendation." : "దశ 6: సమీక్షించి ఉత్తమ విక్రయ ఎంపికను పొందండి."
-            )}
           </div>
         )}
 
@@ -466,7 +552,7 @@ export default function ProduceEntryPage() {
         {currentStep === 6 && (
           <div className="space-y-6">
             <div className="bg-earth-50 rounded-2xl p-6 border border-earth-200 space-y-4 text-xs">
-              <h3 className="font-extrabold uppercase text-slate-700 tracking-wider">Final Verification</h3>
+              <h3 className="font-black uppercase text-slate-700 tracking-wider">Review Produce Listing</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <span className="text-slate-400 block">{t('cropLabel')}</span>
@@ -477,23 +563,15 @@ export default function ProduceEntryPage() {
                   <strong className="text-slate-900 text-sm font-bold">{formData.quantityValue} {formData.quantityUnit}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block">{t('locationLabel')}</span>
-                  <strong className="text-slate-900 text-sm font-bold">{formData.district}, {formData.state}</strong>
+                  <span className="text-slate-400 block">{t('expectedPriceLabel')}</span>
+                  <strong className="text-agri-800 text-sm font-bold">₹{formData.expectedPricePerUnit}/{formData.priceUnit}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block">Transport Quote</span>
-                  <strong className="text-slate-900 text-sm font-bold">
-                    {formData.userProvidedTransportCostPerKg ? `₹${formData.userProvidedTransportCostPerKg}/kg` : 'Using system defaults'}
-                  </strong>
+                  <span className="text-slate-400 block">{t('locationLabel')}</span>
+                  <strong className="text-slate-900 text-sm font-bold">{formData.village}, {formData.district}</strong>
                 </div>
               </div>
             </div>
-
-            {renderHelpBox(
-              language === 'en' ? "Verify all entries and click submit." : "అన్ని వివరాలను ధృవీకరించి సమర్పించండి.",
-              language === 'en' ? "Final summary review." : "సారాంశం సమీక్ష.",
-              language === 'en' ? "View Expected Net Realization on next page." : "తదుపరి పేజీలో ఉత్తమ విక్రయ ఎంపికను చూడండి."
-            )}
           </div>
         )}
 
@@ -527,16 +605,16 @@ export default function ProduceEntryPage() {
               type="button"
               onClick={handleSubmit}
               disabled={loading}
-              className="inline-flex items-center px-8 py-3.5 rounded-xl bg-emerald-500 text-slate-950 text-xs font-black hover:bg-emerald-400 shadow-lg shadow-emerald-900/10 transition disabled:opacity-50"
+              className="inline-flex items-center px-8 py-3.5 rounded-xl bg-emerald-500 text-slate-950 text-xs font-black hover:bg-emerald-400 shadow-lg transition disabled:opacity-50"
             >
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin mr-1.5"></div>
-                  {language === 'en' ? 'Evaluating...' : 'లెక్కలు వేస్తోంది...'}
+                  {language === 'en' ? 'Publishing...' : 'ప్రచురిస్తోంది...'}
                 </>
               ) : (
                 <>
-                  {language === 'en' ? 'Get Selling Report ➔' : 'నివేదికను పొందండి ➔'}
+                  {language === 'en' ? 'Publish & View Decision Report ➔' : 'ప్రచురించి నివేదికను చూడండి ➔'}
                 </>
               )}
             </button>

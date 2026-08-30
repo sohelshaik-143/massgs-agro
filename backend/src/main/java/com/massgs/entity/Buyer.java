@@ -17,6 +17,9 @@ public class Buyer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "massgs_id", nullable = false, unique = true, length = 30)
+    private String massgsId;
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
@@ -25,10 +28,12 @@ public class Buyer {
     private String organizationName;
 
     @Column(name = "buyer_type", nullable = false)
-    private String buyerType; // INSTITUTIONAL, APMC_TRADER, PROCESSOR, EXPORTER
+    @Builder.Default
+    private String buyerType = "LOCAL_BUYER"; // INSTITUTIONAL, APMC_TRADER, PROCESSOR, EXPORTER, LOCAL_BUYER
 
     @Column(name = "verified_status", nullable = false)
-    private String verifiedStatus; // VERIFIED_PLATFORM, EXTERNAL_VERIFIED, UNVERIFIED
+    @Builder.Default
+    private String verifiedStatus = "VERIFIED_PLATFORM"; // VERIFIED_PLATFORM, EXTERNAL_VERIFIED, UNVERIFIED
 
     @Column(name = "contact_email")
     private String contactEmail;
@@ -36,8 +41,14 @@ public class Buyer {
     @Column(name = "contact_phone")
     private String contactPhone;
 
+    private String district;
+    private String state;
+    private String mandal;
+    private String village;
+
     @Column(name = "provenance_indicator")
-    private String provenanceIndicator;
+    @Builder.Default
+    private String provenanceIndicator = "Verified Platform Buyer";
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

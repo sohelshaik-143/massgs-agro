@@ -26,8 +26,16 @@ public class ProduceDto {
         @NotNull
         private BigDecimal quantityKg;
 
+        private String quantityUnit; // kg, quintal, tonne, bag_50kg
+
+        private BigDecimal expectedPricePerUnit;
+        private String priceUnit; // kg, quintal
+
         @NotNull
         private LocalDate readyDate;
+
+        private String village;
+        private String mandal;
 
         @NotNull
         private String district;
@@ -36,6 +44,8 @@ public class ProduceDto {
         private String state;
 
         private String qualityGrade; // A, B, C
+        private String description;
+        private String photoUrl;
 
         private BigDecimal userProvidedTransportCostPerKg; // Optional user transport quote
     }
@@ -48,17 +58,29 @@ public class ProduceDto {
     public static class ListingResponse {
         private Long id;
         private Long farmerId;
+        private String farmerMassgsId;
         private String farmerName;
         private String cropName;
+        private String cropTeluguName;
         private String cropCategory;
         private String varietyName;
         private BigDecimal quantityKg;
+        private String quantityUnit;
+        private BigDecimal expectedPricePerUnit;
+        private String priceUnit;
         private LocalDate readyDate;
+        private String locationVillage;
+        private String locationMandal;
         private String locationDistrict;
         private String locationState;
         private String qualityGrade;
+        private String description;
+        private String photoUrl;
         private String status;
         private BigDecimal userProvidedTransportCostPerKg;
+        private BigDecimal latestMandiModalPrice;
+        private String mandiComparisonText;
+        private MarketplaceDto.UserTrustProfile sellerTrust;
         private LocalDateTime createdAt;
     }
 }

@@ -10,5 +10,7 @@ import java.util.Optional;
 @Repository
 public interface BuyerRepository extends JpaRepository<Buyer, Long> {
     Optional<Buyer> findByUserId(Long userId);
+    Optional<Buyer> findByMassgsId(String massgsId);
     List<Buyer> findByVerifiedStatusNot(String verifiedStatus);
+    List<Buyer> findByDistrictIgnoreCase(String district);
 }

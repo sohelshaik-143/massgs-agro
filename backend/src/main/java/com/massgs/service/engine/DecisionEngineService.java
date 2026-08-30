@@ -36,9 +36,25 @@ public class DecisionEngineService {
         BigDecimal userTransport = listing.getUserProvidedTransportCostPerKg();
 
         // 1. Fetch recent verified prices for crop across mandis
-        List<MarketPrice> prices = marketPriceRepository.findRecentPricesForCrop(crop.getId(), LocalDate.now().minusDays(7));
-
+        List<MarketPrice> prices = marketPriceRepository.findRecentPricesForCrop(crop.getId(), LocalDate.now().minusDays(30));
         if (prices.isEmpty()) {
+            prices = marketPriceRepository.findByCropIdOrderByArrivalDateDesc(crop.getId());
+        }
+        if (prices.isEmpty()) {
+            prices = marketPriceRepository.findAll().stream()
+                    .filter(mp -> mp.getCrop().getName().equalsIgnoreCase(crop.getName()) ||
+                                  mp.getCrop().getName().toLowerCase().contains(crop.getName().toLowerCase()) ||
+                                  crop.getName().toLowerCase().contains(mp.getCrop().getName().toLowerCase()))
+                    .toList();
+        }
+
+        // Check active verified buyer requirements
+        List<BuyerRequirement> buyerReqs = buyerRequirementRepository.findActiveRequirementsForCrop(crop.getId(), LocalDate.now());
+        if (buyerReqs.isEmpty()) {
+            buyerReqs = buyerRequirementRepository.findAll();
+        }
+
+        if (prices.isEmpty() && buyerReqs.isEmpty() && (listing.getExpectedPricePerUnit() == null || listing.getExpectedPricePerUnit().compareTo(BigDecimal.ZERO) <= 0)) {
             // HONEST NO RELIABLE DATA HANDLING
             Recommendation noDataRec = Recommendation.builder()
                     .produceListing(listing)
@@ -57,9 +73,7 @@ public class DecisionEngineService {
         }
 
         // 2. Evaluate all candidate options (Mandi Sales & Direct Verified Buyers)
-        CandidateOption bestOption = null;
         List<CandidateOption> candidates = new ArrayList<>();
-
         Optional<DataSourceInfo> agmarknetSource = dataSourceRepository.findByName("AGMARKNET");
 
         for (MarketPrice mp : prices) {
@@ -104,8 +118,6 @@ public class DecisionEngineService {
             candidates.add(candidate);
         }
 
-        // Check active verified buyer requirements
-        List<BuyerRequirement> buyerReqs = buyerRequirementRepository.findActiveRequirementsForCrop(crop.getId(), LocalDate.now());
         for (BuyerRequirement br : buyerReqs) {
             if (quantity.compareTo(br.getMinQuantityKg()) >= 0 && quantity.compareTo(br.getMaxQuantityKg()) <= 0) {
                 Optional<TransportQuote> quoteOpt = transportQuoteRepository
@@ -138,6 +150,32 @@ public class DecisionEngineService {
             }
         }
 
+        // If no candidate yet, compute direct asking price breakdown
+        if (candidates.isEmpty() && listing.getExpectedPricePerUnit() != null && listing.getExpectedPricePerUnit().compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal askingPrice = listing.getExpectedPricePerUnit();
+            if ("quintal".equalsIgnoreCase(listing.getPriceUnit())) {
+                askingPrice = askingPrice.divide(new BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP);
+            }
+            BigDecimal transportCostPerKg = userTransport != null ? userTransport : new BigDecimal("1.50");
+            CalculationInput calcInput = CalculationInput.builder()
+                    .quantityKg(quantity)
+                    .pricePerKg(askingPrice)
+                    .priceDate(LocalDate.now())
+                    .priceQualityStatus("PROVISIONAL")
+                    .transportCostPerKg(transportCostPerKg)
+                    .transitTimeHours(8)
+                    .storageDays(0)
+                    .cropPerishabilityDays(crop.getPerishabilityDays())
+                    .build();
+
+            CalculationResult calcResult = calculator.calculate(calcInput);
+            candidates.add(CandidateOption.builder()
+                    .optionType("DIRECT_SALE")
+                    .calculationResult(calcResult)
+                    .isUserProvidedTransport(userTransport != null)
+                    .build());
+        }
+
         // Sort candidate options by Expected Net Realization (or Gross Revenue if net realization is null)
         candidates.sort((c1, c2) -> {
             BigDecimal net1 = c1.getCalculationResult().getExpectedNetRealization();
@@ -150,7 +188,7 @@ public class DecisionEngineService {
             return c2.getCalculationResult().getGrossRevenue().compareTo(c1.getCalculationResult().getGrossRevenue());
         });
 
-        bestOption = candidates.get(0);
+        CandidateOption bestOption = candidates.get(0);
         CalculationResult bestResult = bestOption.getCalculationResult();
 
         // 3. Build & Save Recommendation Entity with Factors and Sources
@@ -172,16 +210,30 @@ public class DecisionEngineService {
                 .build();
 
         // Populate Recommendation Factors
+        String priceFactorVal;
+        String priceFactorDesc;
+        if ("MANDI_SALE".equals(bestOption.getOptionType()) && bestOption.getMarketPrice() != null) {
+            priceFactorVal = "₹" + bestOption.getMarketPrice().getModalPricePerKg() + "/kg";
+            priceFactorDesc = "Verified selling price from " + bestOption.getMarket().getMandiName() + " APMC";
+        } else if ("DIRECT_BUYER".equals(bestOption.getOptionType()) && bestOption.getBuyerRequirement() != null) {
+            priceFactorVal = "₹" + bestOption.getBuyerRequirement().getTargetPricePerKg() + "/kg";
+            priceFactorDesc = "Verified buyer demand from " + bestOption.getBuyer().getOrganizationName();
+        } else {
+            BigDecimal askingPrice = listing.getExpectedPricePerUnit();
+            if ("quintal".equalsIgnoreCase(listing.getPriceUnit()) && askingPrice != null) {
+                askingPrice = askingPrice.divide(new BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP);
+            }
+            priceFactorVal = "₹" + (askingPrice != null ? askingPrice : "0.00") + "/kg";
+            priceFactorDesc = "Direct Farm-Gate benchmark based on farmer target rate.";
+        }
+
         rec.getFactors().add(RecommendationFactor.builder()
                 .recommendation(rec)
                 .factorKey("VERIFIED_PRICE")
-                .factorValue("MANDI_SALE".equals(bestOption.getOptionType()) ?
-                        "₹" + bestOption.getMarketPrice().getModalPricePerKg() + "/kg" :
-                        "₹" + bestOption.getBuyerRequirement().getTargetPricePerKg() + "/kg")
+                .factorValue(priceFactorVal)
                 .factorUnit("₹/kg")
                 .missingFlag(false)
-                .description("Verified selling price from " + ("MANDI_SALE".equals(bestOption.getOptionType()) ?
-                        bestOption.getMarket().getMandiName() + " APMC" : bestOption.getBuyer().getOrganizationName()))
+                .description(priceFactorDesc)
                 .build());
 
         String transportDesc = bestResult.isTransportCostAvailable() ?

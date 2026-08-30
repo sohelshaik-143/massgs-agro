@@ -26,6 +26,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
+    private final OtpAuthService otpAuthService;
     private final AuditService auditService;
 
     @Transactional
@@ -39,12 +40,20 @@ public class UserService {
             role = "ROLE_FARMER";
         }
 
+        String massgsId = otpAuthService.generatePermanentMassgsId(role);
+
         User user = User.builder()
+                .massgsId(massgsId)
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .fullName(request.getFullName())
                 .role(role)
                 .phoneNumber(request.getPhoneNumber())
+                .district(request.getDistrict())
+                .state(request.getState())
+                .village(request.getVillage())
+                .mandal(request.getMandal())
+                .isPhoneVerified(request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank())
                 .build();
         user = userRepository.save(user);
 
@@ -54,16 +63,20 @@ public class UserService {
             String district = request.getDistrict() != null ? request.getDistrict() : "Guntur";
             String state = request.getState() != null ? request.getState() : "Andhra Pradesh";
             Farmer farmer = Farmer.builder()
+                    .massgsId(massgsId)
                     .user(user)
                     .district(district)
                     .state(state)
+                    .village(request.getVillage())
+                    .mandal(request.getMandal())
                     .build();
             farmer = farmerRepository.save(farmer);
             roleEntityId = farmer.getId();
         } else if ("ROLE_BUYER".equals(role)) {
             String org = request.getOrganizationName() != null ? request.getOrganizationName() : request.getFullName() + " Agri Trading";
-            String buyerType = request.getBuyerType() != null ? request.getBuyerType() : "APMC_TRADER";
+            String buyerType = request.getBuyerType() != null ? request.getBuyerType() : "LOCAL_BUYER";
             Buyer buyer = Buyer.builder()
+                    .massgsId(massgsId)
                     .user(user)
                     .organizationName(org)
                     .buyerType(buyerType)
@@ -71,12 +84,16 @@ public class UserService {
                     .provenanceIndicator("Verified Platform Buyer")
                     .contactEmail(user.getEmail())
                     .contactPhone(user.getPhoneNumber())
+                    .district(request.getDistrict())
+                    .state(request.getState())
+                    .village(request.getVillage())
+                    .mandal(request.getMandal())
                     .build();
             buyer = buyerRepository.save(buyer);
             roleEntityId = buyer.getId();
         }
 
-        auditService.logAction(user.getId(), "USER_REGISTERED", "User", user.getId(), "Registered with role: " + role);
+        auditService.logAction(user.getId(), "USER_REGISTERED", "User", user.getId(), "Registered with role: " + role + " and MASSGS ID: " + massgsId);
 
         Authentication auth = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
@@ -84,9 +101,13 @@ public class UserService {
 
         return AuthDto.AuthResponse.builder()
                 .token(token)
+                .massgsId(user.getMassgsId())
                 .email(user.getEmail())
+                .phoneNumber(user.getPhoneNumber())
                 .fullName(user.getFullName())
                 .role(user.getRole())
+                .district(user.getDistrict())
+                .state(user.getState())
                 .userId(user.getId())
                 .roleEntityId(roleEntityId)
                 .build();
@@ -107,13 +128,17 @@ public class UserService {
             roleEntityId = buyerRepository.findByUserId(user.getId()).map(Buyer::getId).orElse(null);
         }
 
-        auditService.logAction(user.getId(), "USER_LOGIN", "User", user.getId(), "User logged in");
+        auditService.logAction(user.getId(), "USER_LOGIN", "User", user.getId(), "User logged in with MASSGS ID: " + user.getMassgsId());
 
         return AuthDto.AuthResponse.builder()
                 .token(token)
+                .massgsId(user.getMassgsId())
                 .email(user.getEmail())
+                .phoneNumber(user.getPhoneNumber())
                 .fullName(user.getFullName())
                 .role(user.getRole())
+                .district(user.getDistrict())
+                .state(user.getState())
                 .userId(user.getId())
                 .roleEntityId(roleEntityId)
                 .build();

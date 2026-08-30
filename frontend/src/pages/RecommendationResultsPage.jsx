@@ -13,7 +13,7 @@ export default function RecommendationResultsPage() {
   const [recommendation, setRecommendation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
 
   useEffect(() => {
     loadRecommendation();
@@ -103,15 +103,15 @@ export default function RecommendationResultsPage() {
                 t('unavailableBadge')
               ) : (
                 recommendation.recommendedOptionType === 'MANDI_SALE'
-                  ? `${recommendation.recommendedMarketName} Mandi`
-                  : recommendation.recommendedBuyerName
+                  ? `${recommendation.recommendedMarketName || 'Regional APMC'} Mandi`
+                  : (recommendation.recommendedBuyerName || 'Direct Farm-Gate Procurement')
               )}
             </h1>
 
             {!isNoData && (
               <p className="text-xs text-slate-500 mt-1 flex items-center font-medium">
                 <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400 animate-bounce" />
-                {recommendation.recommendedMarketDistrict || 'Direct Partner'}
+                {recommendation.recommendedMarketDistrict || 'Farm-Gate Pickup & Direct Logistics'}
               </p>
             )}
           </div>

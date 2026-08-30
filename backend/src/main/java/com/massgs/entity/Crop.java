@@ -20,14 +20,20 @@ public class Crop {
     @Column(nullable = false, unique = true)
     private String name;
 
+    @Column(name = "telugu_name")
+    private String teluguName;
+
     @Column(nullable = false)
-    private String category; // PERISHABLE, SEMI_PERISHABLE, STAPLE
+    private String category; // PERISHABLE, SEMI_PERISHABLE, STAPLE, COMMERCIAL, SPICE, FRUIT
 
     @Column(name = "perishability_days", nullable = false)
     private Integer perishabilityDays;
 
     @Column(name = "standard_unit")
     private String standardUnit;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

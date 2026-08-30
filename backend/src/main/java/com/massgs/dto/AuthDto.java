@@ -11,6 +11,45 @@ public class AuthDto {
     @NoArgsConstructor
     @AllArgsConstructor
     @Builder
+    public static class OtpRequestDto {
+        @NotBlank
+        private String phoneNumber;
+
+        private String role; // ROLE_FARMER, ROLE_BUYER, ROLE_ADMIN
+        private String fullName;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class OtpRequestResponse {
+        private String phoneNumber;
+        private int expiresInSeconds;
+        private int resendCooldownSeconds;
+        private String message;
+        private String debugOtpCode;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class OtpVerifyDto {
+        @NotBlank
+        private String phoneNumber;
+
+        @NotBlank
+        private String otpCode;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
     public static class LoginRequest {
         @NotBlank
         @Email
@@ -37,11 +76,13 @@ public class AuthDto {
         private String fullName;
 
         @NotBlank
-        private String role; // ROLE_FARMER, ROLE_BUYER, ROLE_AGGREGATOR, ROLE_ADMIN
+        private String role; // ROLE_FARMER, ROLE_BUYER, ROLE_ADMIN
 
         private String phoneNumber;
         private String district;
         private String state;
+        private String mandal;
+        private String village;
         private String organizationName;
         private String buyerType;
     }
@@ -53,9 +94,13 @@ public class AuthDto {
     @Builder
     public static class AuthResponse {
         private String token;
+        private String massgsId;
         private String email;
+        private String phoneNumber;
         private String fullName;
         private String role;
+        private String district;
+        private String state;
         private Long userId;
         private Long roleEntityId;
     }

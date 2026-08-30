@@ -1,141 +1,177 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Sprout, BarChart3, Database, Sliders, Users, Layers, Activity, Globe, ChevronDown } from 'lucide-react';
+import { Sprout, BarChart3, Search, Globe, LogIn, LogOut, UserCheck, ShieldCheck, ChevronDown, ShoppingBag } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
+import UnifiedSearchModal from './UnifiedSearchModal';
+import AuthModal from './AuthModal';
 
 export default function Navbar() {
   const location = useLocation();
   const { language, setLanguage, t } = useLanguage();
-  const [showToolsDropdown, setShowToolsDropdown] = useState(false);
+  const { user, isAuthenticated, logout, openAuthModal } = useAuth();
 
-  const primaryLinks = [
-    { name: t('todaysMandiRates'), path: '/markets', icon: BarChart3 },
-    { name: t('sellMyCrop'), path: '/produce/new', icon: Sprout },
-    { name: t('myCrop'), path: '/dashboard', icon: Layers },
-  ];
-
-  const secondaryLinks = [
-    { name: t('whatIfSimulator'), path: '/simulator', icon: Sliders },
-    { name: t('fpoAggregation'), path: '/aggregation', icon: Users },
-    { name: t('dataTransparency'), path: '/data-sources', icon: Database },
-    { name: t('adminHealth'), path: '/admin', icon: Activity },
-  ];
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const toggleLanguage = () => {
     setLanguage(language === 'en' ? 'te' : 'en');
   };
 
+  const isFarmerActive = location.pathname.startsWith('/farmer') || location.pathname === '/dashboard' || location.pathname === '/produce/new';
+  const isBuyerActive = location.pathname.startsWith('/buyer') || location.pathname === '/demand/new';
+  const isMarketsActive = location.pathname.startsWith('/markets');
+
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-earth-200 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          
-          {/* Logo & Live Badge */}
-          <div className="flex items-center space-x-3">
-            <Link to="/" className="flex items-center space-x-2.5 group">
-              <div className="w-10 h-10 rounded-xl bg-agri-800 flex items-center justify-center text-white shadow-sm group-hover:bg-agri-700 transition">
-                <Sprout className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <span className="text-xl font-extrabold tracking-tight text-agri-900">{t('appTitle')}</span>
-                <span className="block text-[10px] font-semibold tracking-wider text-earth-600 uppercase">{t('decisionEngine')}</span>
-              </div>
-            </Link>
-
-            <div className="hidden md:flex items-center ml-4 pl-4 border-l border-earth-200">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                {t('liveDataBadge')}
-              </span>
+    <>
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-earth-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16 sm:h-20 gap-4">
+            
+            {/* Logo */}
+            <div className="flex items-center space-x-3">
+              <Link to="/" className="flex items-center space-x-3 group">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-agri-800 flex items-center justify-center text-white shadow-md group-hover:bg-agri-700 transition">
+                  <Sprout className="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                  <span className="text-xl font-black tracking-tight text-slate-900 block leading-tight">
+                    {t('appTitle')}
+                  </span>
+                  <span className="block text-[10px] font-bold tracking-wider text-agri-800 uppercase">
+                    {t('appTagline')}
+                  </span>
+                </div>
+              </Link>
             </div>
-          </div>
 
-          {/* Navigation Links */}
-          <nav className="hidden lg:flex items-center space-x-2 relative">
-            {primaryLinks.map((link) => {
-              const Icon = link.icon;
-              const isActive = location.pathname === link.path;
-              return (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  className={`inline-flex items-center px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
-                    isActive
-                      ? 'bg-agri-50 text-agri-800 border border-agri-100 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-earth-50'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 mr-1.5 text-agri-600" />
-                  {link.name}
-                </Link>
-              );
-            })}
-
-            {/* Dropdown for Secondary Tools */}
-            <div className="relative">
-              <button
-                onClick={() => setShowToolsDropdown(!showToolsDropdown)}
-                className="inline-flex items-center px-3.5 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-earth-50 transition focus:outline-none"
+            {/* Portal Switcher & Main Nav */}
+            <nav className="hidden md:flex items-center p-1 bg-slate-100/80 rounded-2xl border border-slate-200/80">
+              <Link
+                to="/farmer"
+                className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${
+                  isFarmerActive
+                    ? 'bg-white text-agri-900 shadow-sm border border-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
-                <span>{t('moreTools')}</span>
-                <ChevronDown className="w-4 h-4 ml-1 text-slate-400" />
+                🌾 {t('farmerPortal')}
+              </Link>
+
+              <Link
+                to="/buyer"
+                className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${
+                  isBuyerActive
+                    ? 'bg-white text-agri-900 shadow-sm border border-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🏢 {t('buyerPortal')}
+              </Link>
+
+              <Link
+                to="/markets"
+                className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${
+                  isMarketsActive
+                    ? 'bg-white text-agri-900 shadow-sm border border-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5 text-agri-600" />
+                {t('marketIntelligence')}
+              </Link>
+            </nav>
+
+            {/* Global Search Bar Trigger & Action Elements */}
+            <div className="flex items-center space-x-2.5">
+              {/* Universal Search Button */}
+              <button
+                onClick={() => setIsSearchOpen(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-earth-200 bg-earth-50/70 hover:bg-earth-100 text-slate-500 hover:text-slate-800 text-xs font-semibold transition"
+                title="Search crops, locations, listings, demands"
+              >
+                <Search className="w-4 h-4 text-slate-400" />
+                <span className="hidden xl:inline">{t('searchBtn')}...</span>
+                <kbd className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-white text-[10px] font-bold text-slate-400 border">
+                  ⌘K
+                </kbd>
               </button>
 
-              {showToolsDropdown && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-10" 
-                    onClick={() => setShowToolsDropdown(false)}
-                  ></div>
-                  <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-earth-200 shadow-xl py-2 z-20 transition">
-                    {secondaryLinks.map((link) => {
-                      const Icon = link.icon;
-                      const isActive = location.pathname === link.path;
-                      return (
+              {/* Language Switcher */}
+              <button
+                onClick={toggleLanguage}
+                className="inline-flex items-center px-3 py-2 rounded-xl border border-earth-200 bg-white hover:bg-earth-50 text-slate-700 transition text-xs font-black space-x-1.5 shadow-sm"
+              >
+                <Globe className="w-3.5 h-3.5 text-agri-700" />
+                <span>{language === 'en' ? 'తెలుగు' : 'English'}</span>
+              </button>
+
+              {/* Auth / Profile Area */}
+              {isAuthenticated ? (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-agri-50 border border-agri-200 text-agri-900 text-xs font-black shadow-sm hover:bg-agri-100 transition"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span className="font-mono">{user?.massgsId || 'MASSGS ID'}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+
+                  {showUserMenu && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowUserMenu(false)} />
+                      <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-earth-200 shadow-xl py-3 z-20 transition text-xs">
+                        <div className="px-4 py-2 border-b border-earth-100 mb-1">
+                          <p className="font-black text-slate-900 text-sm">{user?.fullName}</p>
+                          <p className="text-[11px] font-mono text-agri-800 font-bold">{user?.massgsId}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {user?.role === 'ROLE_BUYER' ? 'Verified Buyer' : 'Verified Farmer'} • {user?.district || 'Andhra Pradesh'}
+                          </p>
+                        </div>
+
                         <Link
-                          key={link.path}
-                          to={link.path}
-                          onClick={() => setShowToolsDropdown(false)}
-                          className={`flex items-center px-4 py-2.5 text-sm font-medium transition ${
-                            isActive
-                              ? 'bg-earth-100 text-slate-900 font-bold'
-                              : 'text-slate-600 hover:bg-earth-50 hover:text-slate-900'
-                          }`}
+                          to={user?.role === 'ROLE_BUYER' ? '/buyer' : '/farmer'}
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center px-4 py-2.5 text-slate-700 hover:bg-earth-50 font-bold"
                         >
-                          <Icon className="w-4 h-4 mr-2.5 text-slate-400" />
-                          {link.name}
+                          {user?.role === 'ROLE_BUYER' ? '🏢 Buyer Dashboard' : '🌾 Farmer Dashboard'}
                         </Link>
-                      );
-                    })}
-                  </div>
-                </>
+
+                        <button
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            logout();
+                          }}
+                          className="w-full text-left flex items-center px-4 py-2.5 text-red-600 hover:bg-red-50 font-bold border-t border-earth-100 mt-1"
+                        >
+                          <LogOut className="w-4 h-4 mr-2" />
+                          {t('logoutBtn')}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => openAuthModal('ROLE_FARMER')}
+                  className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-black bg-agri-800 text-white hover:bg-agri-700 shadow-sm transition gap-1.5"
+                >
+                  <LogIn className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>{t('loginBtn')}</span>
+                </button>
               )}
+
             </div>
-          </nav>
-
-          {/* Action Bar (Language Switcher & CTA) */}
-          <div className="flex items-center space-x-3">
-            {/* Language Switcher */}
-            <button
-              onClick={toggleLanguage}
-              className="inline-flex items-center px-3 py-2 rounded-xl border border-earth-200 bg-earth-50 text-slate-700 hover:bg-earth-100 transition text-xs font-bold space-x-1.5 focus:outline-none"
-              title={t('selectLanguage')}
-            >
-              <Globe className="w-4 h-4 text-slate-500" />
-              <span>{language === 'en' ? 'తెలుగు' : 'English'}</span>
-            </button>
-
-            <Link
-              to="/produce/new"
-              className="inline-flex items-center px-4 py-2 rounded-xl text-sm font-extrabold bg-agri-800 text-white hover:bg-agri-700 shadow-sm transition"
-            >
-              <Sprout className="w-4 h-4 mr-1.5 text-emerald-300" />
-              {t('sellMyCrop')}
-            </Link>
           </div>
-
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Unified Search Modal */}
+      <UnifiedSearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+
+      {/* OTP Auth Modal */}
+      <AuthModal />
+    </>
   );
 }

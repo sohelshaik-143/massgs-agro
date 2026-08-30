@@ -32,3 +32,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Media Uploads
+uploads/
+backend/uploads/
