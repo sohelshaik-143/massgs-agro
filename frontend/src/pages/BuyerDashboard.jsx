@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { buyerApi, farmerApi, marketplaceApi, locationApi, marketApi } from '../services/api';
+import { buyerApi, farmerApi, marketplaceApi, locationApi, marketApi, getMediaUrl } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -60,11 +60,19 @@ export default function BuyerDashboard() {
     setLoading(true);
     try {
       const [listRes, distRes] = await Promise.all([
-        farmerApi.getListings({ district: selectedDistrict || undefined, crop: cropFilter || undefined }),
+        farmerApi.getListings({ district: selectedDistrict || undefined, crop: cropFilter || undefined }).catch(() => ({ data: [] })),
         locationApi.getDistricts('Andhra Pradesh').catch(() => ({ data: ['Guntur', 'Chittoor', 'Kurnool', 'Krishna', 'Tirupati', 'West Godavari'] })),
       ]);
 
-      setListings(listRes.data || []);
+      const localListings = JSON.parse(localStorage.getItem('massgs_local_listings') || '[]');
+      const combinedListings = [...(listRes.data || [])];
+      localListings.forEach(local => {
+        if (!combinedListings.some(item => item.id === local.id)) {
+          combinedListings.unshift(local);
+        }
+      });
+
+      setListings(combinedListings);
       setDistricts(distRes.data || []);
 
       const buyerIdentifier = user?.roleEntityId || user?.userId || 1;
@@ -325,7 +333,7 @@ export default function BuyerDashboard() {
                               className="relative group rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 transition flex-shrink-0"
                               title="Click to view seller visual evidence photo"
                             >
-                              <img src={item.photoUrl} alt={item.cropName} className="w-14 h-14 object-cover" />
+                              <img src={getMediaUrl(item.photoUrl)} alt={item.cropName} className="w-14 h-14 object-cover" />
                               <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
                                 <Eye className="w-4 h-4 text-white" />
                               </div>

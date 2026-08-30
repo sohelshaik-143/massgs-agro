@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { searchApi } from '../services/api';
+import { searchApi, getMediaUrl } from '../services/api';
 import { Search, X, MapPin, Sprout, ShoppingBag, ArrowUpRight, HelpCircle, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -185,7 +185,7 @@ export default function UnifiedSearchModal({ isOpen, onClose }) {
                     <div className="flex items-center gap-3">
                       {l.photoUrl ? (
                         <img
-                          src={l.photoUrl}
+                          src={getMediaUrl(l.photoUrl)}
                           alt={l.cropName}
                           className="w-12 h-12 rounded-xl object-cover border"
                         />

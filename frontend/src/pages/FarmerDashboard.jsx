@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { farmerApi, buyerApi, marketplaceApi, marketApi } from '../services/api';
+import { farmerApi, buyerApi, marketplaceApi, marketApi, getMediaUrl } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -45,16 +45,25 @@ export default function FarmerDashboard() {
     setLoading(true);
     try {
       const [listRes, demandRes, rateRes] = await Promise.all([
-        farmerApi.getListings(),
-        buyerApi.getActiveDemands(),
-        marketApi.getLatestRates(),
+        farmerApi.getListings().catch(() => ({ data: [] })),
+        buyerApi.getActiveDemands().catch(() => ({ data: [] })),
+        marketApi.getLatestRates().catch(() => ({ data: [] })),
       ]);
 
-      setListings(listRes.data || []);
+      const localListings = JSON.parse(localStorage.getItem('massgs_local_listings') || '[]');
+      const combinedListings = [...(listRes.data || [])];
+      // Append any unique local listings not already in server response
+      localListings.forEach(local => {
+        if (!combinedListings.some(item => item.id === local.id)) {
+          combinedListings.unshift(local);
+        }
+      });
+
+      setListings(combinedListings);
       setDemands(demandRes.data || []);
       setRates((rateRes.data || []).slice(0, 8));
 
-      const farmerIdentifier = user?.roleEntityId || user?.userId || (listRes.data && listRes.data[0]?.farmerId) || 1;
+      const farmerIdentifier = user?.roleEntityId || user?.userId || (combinedListings[0]?.farmerId) || 1;
       const [offRes, agRes, txRes, trRes] = await Promise.all([
         marketplaceApi.getFarmerOffers(farmerIdentifier).catch(() => ({ data: [] })),
         marketplaceApi.getFarmerAgreements(farmerIdentifier).catch(() => ({ data: [] })),
@@ -263,7 +272,7 @@ export default function FarmerDashboard() {
                               className="relative group rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 transition flex-shrink-0"
                               title="Click to inspect visual evidence"
                             >
-                              <img src={item.photoUrl} alt={item.cropName} className="w-14 h-14 object-cover" />
+                              <img src={getMediaUrl(item.photoUrl)} alt={item.cropName} className="w-14 h-14 object-cover" />
                               <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
                                 <Eye className="w-4 h-4 text-white" />
                               </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { X, AlertCircle, Eye } from 'lucide-react';
+import { getMediaUrl } from '../services/api';
 
 export default function PhotoPreviewModal({ isOpen, onClose, photoUrl, cropName, farmerName, location }) {
   const { t, language } = useLanguage();
@@ -31,7 +32,7 @@ export default function PhotoPreviewModal({ isOpen, onClose, photoUrl, cropName,
         {/* Photo Container */}
         <div className="p-4 bg-slate-900 flex items-center justify-center overflow-auto flex-grow max-h-[60vh]">
           <img
-            src={photoUrl}
+            src={getMediaUrl(photoUrl)}
             alt={cropName}
             className="max-h-full max-w-full object-contain rounded-xl shadow-lg"
           />
