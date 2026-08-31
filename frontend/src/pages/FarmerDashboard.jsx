@@ -94,22 +94,87 @@ export default function FarmerDashboard() {
     }
   };
 
+  const isSameBuyer = (o1, o2) => {
+    if (!o1 || !o2) return false;
+    if (o1.buyerId && o2.buyerId && String(o1.buyerId) === String(o2.buyerId)) return true;
+    if (o1.buyerMassgsId && o2.buyerMassgsId && o1.buyerMassgsId === o2.buyerMassgsId) return true;
+    const name1 = (o1.buyerOrgName || o1.buyerName || '').trim().toLowerCase();
+    const name2 = (o2.buyerOrgName || o2.buyerName || '').trim().toLowerCase();
+    return Boolean(name1 && name2 && name1 === name2);
+  };
+
+  const isSameCrop = (o1, o2) => {
+    if (!o1 || !o2) return false;
+    const crop1 = (o1.cropName || '').trim().toLowerCase();
+    const crop2 = (o2.cropName || '').trim().toLowerCase();
+    return Boolean(crop1 && crop2 && crop1 === crop2);
+  };
+
   const handleRespondOffer = async (offerId, action, customPrice) => {
+    const targetOffer = offers.find(o => o.id === offerId);
+
+    // Strict validation: Only 1 offer from the same buyer can be accepted for the same crop
+    if (action === 'ACCEPT' && targetOffer) {
+      const alreadyAccepted = offers.some(o =>
+        o.id !== offerId &&
+        o.status === 'ACCEPTED' &&
+        isSameBuyer(o, targetOffer) &&
+        isSameCrop(o, targetOffer)
+      );
+
+      if (alreadyAccepted) {
+        const buyerLabel = targetOffer.buyerOrgName || targetOffer.buyerName || 'this buyer';
+        const cropLabel = targetOffer.cropName || 'this crop';
+        alert(language === 'en'
+          ? `Cannot accept multiple offers from ${buyerLabel} for ${cropLabel}. You have already accepted an offer from this buyer for this crop.`
+          : `${buyerLabel} నుండి ${cropLabel} పంటకు ఇప్పటికే ఒక ఆఫర్ ఆమోదించబడింది. ఒకే కొనుగోలుదారు నుండి ఒకే పంటకు బహుళ ఆఫర్లను ఆమోదించడం కుదరదు.`);
+        return;
+      }
+    }
+
     setRespondingOfferId(offerId);
+    let backendSuccess = false;
     try {
       const priceVal = customPrice ? parseFloat(customPrice) : undefined;
       await marketplaceApi.respondToOffer(offerId, action, priceVal);
+      backendSuccess = true;
     } catch (err) {
+      const errMsg = err.response?.data?.message || err.response?.data?.error;
+      if (errMsg) {
+        alert(errMsg);
+        setRespondingOfferId(null);
+        return;
+      }
       console.warn('Backend unavailable, responding to offer locally:', err);
     }
 
     // Update local storage offers
-    let targetOffer = null;
+    let target = null;
     try {
       const localOffers = JSON.parse(localStorage.getItem('massgs_local_offers') || '[]');
+
+      if (action === 'ACCEPT') {
+        const localTarget = localOffers.find(o => o.id === offerId) || targetOffer;
+        if (localTarget) {
+          const duplicateInLocal = localOffers.some(o =>
+            o.id !== offerId &&
+            o.status === 'ACCEPTED' &&
+            isSameBuyer(o, localTarget) &&
+            isSameCrop(o, localTarget)
+          );
+          if (duplicateInLocal) {
+            alert(language === 'en'
+              ? `Cannot accept multiple offers from ${localTarget.buyerOrgName || localTarget.buyerName || 'this buyer'} for ${localTarget.cropName || 'this crop'}.`
+              : `ఈ కొనుగోలుదారు నుండి ఈ పంటకు ఇప్పటికే ఒక ఆఫర్ ఆమోదించబడింది.`);
+            setRespondingOfferId(null);
+            return;
+          }
+        }
+      }
+
       const updated = localOffers.map(o => {
         if (o.id === offerId) {
-          targetOffer = o;
+          target = o;
           return { ...o, status: action === 'ACCEPT' ? 'ACCEPTED' : action === 'REJECT' ? 'REJECTED' : 'COUNTERED', counterPrice: customPrice };
         }
         return o;
@@ -119,17 +184,18 @@ export default function FarmerDashboard() {
       // If accepted, generate a local agreement
       if (action === 'ACCEPT') {
         const agreementCode = `AGR-${Date.now().toString().slice(-6)}`;
+        const resolvedOffer = target || targetOffer;
         const newAgreement = {
           id: Date.now(),
           offerId: offerId,
           agreementCode: agreementCode,
           farmerName: user?.fullName || 'Farmer',
-          buyerName: targetOffer?.buyerName || 'Verified Institutional Buyer',
-          cropName: targetOffer?.cropName || 'Produce',
-          quantityKg: targetOffer?.offeredQuantityKg || 1000,
-          agreedPricePerKg: targetOffer?.offeredPricePerKg || 185,
-          totalAmount: (targetOffer?.offeredQuantityKg || 1000) * (targetOffer?.offeredPricePerKg || 185),
-          deliveryTerms: targetOffer?.deliveryTerms || 'FARM_GATE_PICKUP',
+          buyerName: resolvedOffer?.buyerOrgName || resolvedOffer?.buyerName || 'Verified Institutional Buyer',
+          cropName: resolvedOffer?.cropName || 'Produce',
+          quantityKg: resolvedOffer?.offeredQuantityKg || 1000,
+          agreedPricePerKg: resolvedOffer?.offeredPricePerKg || 185,
+          totalAmount: (resolvedOffer?.offeredQuantityKg || 1000) * (resolvedOffer?.offeredPricePerKg || 185),
+          deliveryTerms: resolvedOffer?.deliveryTerms || 'FARM_GATE_PICKUP',
           status: 'PENDING_SIGNATURES',
           farmerAccepted: true,
           buyerAccepted: true,
@@ -482,6 +548,12 @@ export default function FarmerDashboard() {
                       const isCountering = counteringOfferId === o.id;
                       const isAccepted = o.status === 'ACCEPTED';
                       const matchingAgreement = agreements.find(a => a.offerId === o.id);
+                      const hasBuyerCropConflict = o.status === 'PENDING' && offers.some(other =>
+                        other.id !== o.id &&
+                        other.status === 'ACCEPTED' &&
+                        isSameBuyer(other, o) &&
+                        isSameCrop(other, o)
+                      );
 
                       return (
                         <div key={o.id} className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition space-y-4 shadow-xs">
@@ -509,6 +581,17 @@ export default function FarmerDashboard() {
                                   Buyer note: "{o.notes}"
                                 </p>
                               )}
+
+                              {hasBuyerCropConflict && (
+                                <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center gap-2">
+                                  <AlertOctagon className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                                  <span>
+                                    {language === 'en'
+                                      ? `Offer from ${o.buyerOrgName || o.buyerName || 'this buyer'} already accepted for ${o.cropName}. Only 1 accepted offer per buyer is allowed for this crop.`
+                                      : `${o.buyerOrgName || o.buyerName || 'ఈ కొనుగోలుదారు'} నుండి ${o.cropName} పంటకు ఇప్పటికే ఒక ఆఫర్ ఆమోదించబడింది. ఒకే పంటకు 1 ఆఫర్ మాత్రమే ఆమోదించబడుతుంది.`}
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             {/* Actions */}
@@ -516,11 +599,24 @@ export default function FarmerDashboard() {
                               {o.status === 'PENDING' && (
                                 <>
                                   <button
-                                    onClick={() => handleRespondOffer(o.id, 'ACCEPT')}
-                                    disabled={isResponding}
-                                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                                    onClick={() => {
+                                      if (hasBuyerCropConflict) {
+                                        alert(language === 'en'
+                                          ? `Cannot accept multiple offers from ${o.buyerOrgName || o.buyerName || 'this buyer'} for ${o.cropName}. You have already accepted an offer from this buyer for this crop.`
+                                          : `${o.buyerOrgName || o.buyerName || 'ఈ కొనుగోలుదారు'} నుండి ${o.cropName} పంటకు ఇప్పటికే ఒక ఆఫర్ ఆమోదించబడింది.`);
+                                        return;
+                                      }
+                                      handleRespondOffer(o.id, 'ACCEPT');
+                                    }}
+                                    disabled={isResponding || hasBuyerCropConflict}
+                                    title={hasBuyerCropConflict ? (language === 'en' ? 'Offer already accepted for this crop from this buyer' : 'ఈ కొనుగోలుదారు నుండి ఈ పంటకు ఇప్పటికే ఒక ఆఫర్ ఆమోదించబడింది') : ''}
+                                    className={`px-4 py-2.5 rounded-xl text-xs font-black transition shadow-sm flex items-center gap-1.5 cursor-pointer ${
+                                      hasBuyerCropConflict
+                                        ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-75'
+                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50'
+                                    }`}
                                   >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <CheckCircle2 className={`w-3.5 h-3.5 ${hasBuyerCropConflict ? 'text-slate-400' : 'text-white'}`} />
                                     <span>{language === 'en' ? 'Accept Offer' : 'ఆఫర్ ఆమోదించు'}</span>
                                   </button>
 

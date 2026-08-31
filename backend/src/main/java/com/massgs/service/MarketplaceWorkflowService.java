@@ -121,6 +121,34 @@ public class MarketplaceWorkflowService {
 
         String act = action.toUpperCase();
         if ("ACCEPT".equals(act)) {
+            // Validation: Farmer can only accept ONE offer from the same buyer for the same crop.
+            // If crop is different, or if the buyer is different, acceptance is allowed.
+            Long farmerId = offer.getFarmer().getId();
+            Long buyerId = offer.getBuyer().getId();
+            Long cropId = offer.getProduceListing() != null && offer.getProduceListing().getCrop() != null
+                    ? offer.getProduceListing().getCrop().getId() : null;
+            String cropName = offer.getProduceListing() != null && offer.getProduceListing().getCrop() != null
+                    ? offer.getProduceListing().getCrop().getName() : "this crop";
+
+            List<Offer> farmerOffers = offerRepository.findByFarmerIdOrderByCreatedAtDesc(farmerId);
+            boolean alreadyAcceptedForCrop = farmerOffers.stream()
+                    .filter(o -> !o.getId().equals(offer.getId()))
+                    .filter(o -> "ACCEPTED".equalsIgnoreCase(o.getStatus()))
+                    .filter(o -> o.getBuyer() != null && o.getBuyer().getId().equals(buyerId))
+                    .anyMatch(o -> {
+                        if (o.getProduceListing() == null || o.getProduceListing().getCrop() == null) return false;
+                        Crop otherCrop = o.getProduceListing().getCrop();
+                        return (cropId != null && cropId.equals(otherCrop.getId())) ||
+                                (cropName != null && !cropName.isBlank() && cropName.equalsIgnoreCase(otherCrop.getName()));
+                    });
+
+            if (alreadyAcceptedForCrop) {
+                String buyerLabel = offer.getBuyer().getOrganizationName() != null
+                        ? offer.getBuyer().getOrganizationName()
+                        : offer.getBuyer().getMassgsId();
+                throw new IllegalStateException("Farmer has already accepted an offer from " + buyerLabel + " for " + cropName + ". Multiple accepted offers from the same buyer for the same crop are not allowed.");
+            }
+
             offer.setStatus("ACCEPTED");
             offer = offerRepository.save(offer);
 

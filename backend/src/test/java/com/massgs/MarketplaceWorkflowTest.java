@@ -113,27 +113,154 @@ public class MarketplaceWorkflowTest {
     }
 
     @Test
-    void testFeedback_WhenTransactionNotCompleted_ThrowsException() {
-        MarketplaceTransaction txn = MarketplaceTransaction.builder()
-                .id(1L)
-                .transactionCode("TXN-20260830-123456")
-                .farmer(farmer)
+    void testRespondToOffer_AcceptFirstOffer_Success() {
+        Offer offer1 = Offer.builder()
+                .id(501L)
+                .offerCode("OFR-20260831-501")
+                .produceListing(listing)
                 .buyer(buyer)
-                .crop(crop)
-                .agreedPricePerKg(new BigDecimal("200"))
-                .quantityKg(new BigDecimal("500"))
-                .totalAmount(new BigDecimal("100000"))
-                .status("IN_PROGRESS")
+                .farmer(farmer)
+                .offeredPricePerKg(new BigDecimal("210.00"))
+                .offeredQuantityKg(new BigDecimal("500"))
+                .totalAmount(new BigDecimal("105000.00"))
+                .status("PENDING")
                 .build();
 
-        when(transactionRepository.findById(1L)).thenReturn(Optional.of(txn));
+        when(offerRepository.findById(501L)).thenReturn(Optional.of(offer1));
+        when(offerRepository.findByFarmerIdOrderByCreatedAtDesc(1L)).thenReturn(java.util.Collections.emptyList());
+        when(offerRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(agreementRepository.save(any())).thenAnswer(i -> {
+            DigitalAgreement a = i.getArgument(0);
+            a.setId(901L);
+            return a;
+        });
 
-        assertThatThrownBy(() -> workflowService.submitFeedback(MarketplaceDto.SubmitFeedbackRequest.builder()
-                .transactionId(1L)
-                .rating(5)
-                .comment("Excellent quality produce")
-                .build(), buyerUser))
+        MarketplaceDto.OfferResponse response = workflowService.respondToOffer(501L, "ACCEPT", null, farmerUser);
+
+        assertThat(response.getStatus()).isEqualTo("ACCEPTED");
+        verify(agreementRepository, times(1)).save(any(DigitalAgreement.class));
+    }
+
+    @Test
+    void testRespondToOffer_AcceptDuplicateOfferSameBuyerSameCrop_ThrowsIllegalStateException() {
+        Offer offerAlreadyAccepted = Offer.builder()
+                .id(501L)
+                .offerCode("OFR-20260831-501")
+                .produceListing(listing)
+                .buyer(buyer)
+                .farmer(farmer)
+                .offeredPricePerKg(new BigDecimal("210.00"))
+                .offeredQuantityKg(new BigDecimal("500"))
+                .totalAmount(new BigDecimal("105000.00"))
+                .status("ACCEPTED")
+                .build();
+
+        Offer secondOfferSameBuyerSameCrop = Offer.builder()
+                .id(502L)
+                .offerCode("OFR-20260831-502")
+                .produceListing(listing)
+                .buyer(buyer)
+                .farmer(farmer)
+                .offeredPricePerKg(new BigDecimal("215.00"))
+                .offeredQuantityKg(new BigDecimal("400"))
+                .totalAmount(new BigDecimal("86000.00"))
+                .status("PENDING")
+                .build();
+
+        when(offerRepository.findById(502L)).thenReturn(Optional.of(secondOfferSameBuyerSameCrop));
+        when(offerRepository.findByFarmerIdOrderByCreatedAtDesc(1L)).thenReturn(java.util.List.of(offerAlreadyAccepted, secondOfferSameBuyerSameCrop));
+
+        assertThatThrownBy(() -> workflowService.respondToOffer(502L, "ACCEPT", null, farmerUser))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("COMPLETED");
+                .hasMessageContaining("Multiple accepted offers from the same buyer for the same crop are not allowed");
+
+        verify(agreementRepository, never()).save(any());
+    }
+
+    @Test
+    void testRespondToOffer_AcceptOfferSameBuyerDifferentCrop_Success() {
+        Crop tomato = Crop.builder().id(2L).name("Tomato").teluguName("టమోటా").build();
+        ProduceListing tomatoListing = ProduceListing.builder()
+                .id(101L)
+                .farmer(farmer)
+                .crop(tomato)
+                .quantityKg(new BigDecimal("500"))
+                .build();
+
+        Offer chiliAcceptedOffer = Offer.builder()
+                .id(501L)
+                .offerCode("OFR-20260831-501")
+                .produceListing(listing) // Red Chilli
+                .buyer(buyer)
+                .farmer(farmer)
+                .status("ACCEPTED")
+                .build();
+
+        Offer tomatoOfferSameBuyer = Offer.builder()
+                .id(503L)
+                .offerCode("OFR-20260831-503")
+                .produceListing(tomatoListing) // Tomato (different crop)
+                .buyer(buyer) // Same buyer
+                .farmer(farmer)
+                .offeredPricePerKg(new BigDecimal("35.00"))
+                .offeredQuantityKg(new BigDecimal("500"))
+                .totalAmount(new BigDecimal("17500.00"))
+                .status("PENDING")
+                .build();
+
+        when(offerRepository.findById(503L)).thenReturn(Optional.of(tomatoOfferSameBuyer));
+        when(offerRepository.findByFarmerIdOrderByCreatedAtDesc(1L)).thenReturn(java.util.List.of(chiliAcceptedOffer, tomatoOfferSameBuyer));
+        when(offerRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(agreementRepository.save(any())).thenAnswer(i -> {
+            DigitalAgreement a = i.getArgument(0);
+            a.setId(902L);
+            return a;
+        });
+
+        MarketplaceDto.OfferResponse response = workflowService.respondToOffer(503L, "ACCEPT", null, farmerUser);
+
+        assertThat(response.getStatus()).isEqualTo("ACCEPTED");
+        verify(agreementRepository, times(1)).save(any(DigitalAgreement.class));
+    }
+
+    @Test
+    void testRespondToOffer_AcceptOfferDifferentBuyerSameCrop_Success() {
+        User buyer2User = User.builder().id(21L).massgsId("MASSGS-B-333333").fullName("Buyer Rao").role("ROLE_BUYER").build();
+        Buyer buyer2 = Buyer.builder().id(3L).massgsId("MASSGS-B-333333").user(buyer2User).organizationName("Rao Agro").build();
+
+        Offer buyer1AcceptedOffer = Offer.builder()
+                .id(501L)
+                .offerCode("OFR-20260831-501")
+                .produceListing(listing)
+                .buyer(buyer)
+                .farmer(farmer)
+                .status("ACCEPTED")
+                .build();
+
+        Offer buyer2OfferSameCrop = Offer.builder()
+                .id(504L)
+                .offerCode("OFR-20260831-504")
+                .produceListing(listing)
+                .buyer(buyer2) // Different buyer
+                .farmer(farmer)
+                .offeredPricePerKg(new BigDecimal("225.00"))
+                .offeredQuantityKg(new BigDecimal("500"))
+                .totalAmount(new BigDecimal("112500.00"))
+                .status("PENDING")
+                .build();
+
+        when(offerRepository.findById(504L)).thenReturn(Optional.of(buyer2OfferSameCrop));
+        when(offerRepository.findByFarmerIdOrderByCreatedAtDesc(1L)).thenReturn(java.util.List.of(buyer1AcceptedOffer, buyer2OfferSameCrop));
+        when(offerRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(agreementRepository.save(any())).thenAnswer(i -> {
+            DigitalAgreement a = i.getArgument(0);
+            a.setId(903L);
+            return a;
+        });
+
+        MarketplaceDto.OfferResponse response = workflowService.respondToOffer(504L, "ACCEPT", null, farmerUser);
+
+        assertThat(response.getStatus()).isEqualTo("ACCEPTED");
+        verify(agreementRepository, times(1)).save(any(DigitalAgreement.class));
     }
 }
