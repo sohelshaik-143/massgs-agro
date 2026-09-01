@@ -225,9 +225,11 @@ public class OtpAuthService {
                 .build();
     }
 
+    private static final String ID_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
     /**
      * Generate a unique, permanent, non-reusable MASSGS ID.
-     * Format: MASSGS-F-XXXXXX (Farmer), MASSGS-B-XXXXXX (Buyer), MASSGS-A-XXXXXX (Admin)
+     * Format: MASSGS-F-8K42P7Q9 (Farmer), MASSGS-B-4H91XK27 (Buyer), MASSGS-A-XXXXXXXX (Admin)
      */
     public String generatePermanentMassgsId(String role) {
         String prefix = "MASSGS-F-";
@@ -240,11 +242,14 @@ public class OtpAuthService {
         String massgsId;
         int attempts = 0;
         do {
-            int randomNum = 100000 + RANDOM.nextInt(900000);
-            massgsId = prefix + randomNum;
+            StringBuilder sb = new StringBuilder(8);
+            for (int i = 0; i < 8; i++) {
+                sb.append(ID_ALPHABET.charAt(RANDOM.nextInt(ID_ALPHABET.length())));
+            }
+            massgsId = prefix + sb.toString();
             attempts++;
             if (attempts > 50) {
-                massgsId = prefix + System.currentTimeMillis() % 1000000;
+                massgsId = prefix + (System.currentTimeMillis() % 100000000);
                 break;
             }
         } while (userRepository.existsByMassgsId(massgsId));

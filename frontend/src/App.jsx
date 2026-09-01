@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import LandingPage from './pages/LandingPage';
+import AuthPage from './pages/AuthPage';
 import FarmerDashboard from './pages/FarmerDashboard';
 import BuyerDashboard from './pages/BuyerDashboard';
 import ProduceEntryPage from './pages/ProduceEntryPage';
@@ -11,6 +12,7 @@ import WhatIfSimulatorPage from './pages/WhatIfSimulatorPage';
 import FpoAggregationPage from './pages/FpoAggregationPage';
 import DataSourcesPage from './pages/DataSourcesPage';
 import AdminDataMonitorPage from './pages/AdminDataMonitorPage';
+import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 
 export default function App() {
@@ -22,17 +24,97 @@ export default function App() {
 
           <main className="flex-grow">
             <Routes>
+              {/* Public Authentication Routes */}
+              <Route path="/login" element={<AuthPage initialMode="LOGIN" />} />
+              <Route path="/register" element={<AuthPage initialMode="REGISTER" />} />
+              <Route path="/forgot-password" element={<AuthPage initialMode="FORGOT_PASSWORD" />} />
+
+              {/* Public Entry Gateway */}
               <Route path="/" element={<LandingPage />} />
-              <Route path="/farmer" element={<FarmerDashboard />} />
-              <Route path="/dashboard" element={<FarmerDashboard />} />
-              <Route path="/buyer" element={<BuyerDashboard />} />
-              <Route path="/produce/new" element={<ProduceEntryPage />} />
-              <Route path="/recommendation/:listingId" element={<RecommendationResultsPage />} />
-              <Route path="/markets" element={<MarketIntelligencePage />} />
-              <Route path="/simulator" element={<WhatIfSimulatorPage />} />
-              <Route path="/aggregation" element={<FpoAggregationPage />} />
-              <Route path="/data-sources" element={<DataSourcesPage />} />
-              <Route path="/admin" element={<AdminDataMonitorPage />} />
+
+              {/* Protected Application Routes */}
+              <Route
+                path="/farmer"
+                element={
+                  <ProtectedRoute>
+                    <FarmerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <FarmerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/buyer"
+                element={
+                  <ProtectedRoute>
+                    <BuyerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/produce/new"
+                element={
+                  <ProtectedRoute>
+                    <ProduceEntryPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/recommendation/:listingId"
+                element={
+                  <ProtectedRoute>
+                    <RecommendationResultsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/markets"
+                element={
+                  <ProtectedRoute>
+                    <MarketIntelligencePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/simulator"
+                element={
+                  <ProtectedRoute>
+                    <WhatIfSimulatorPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/aggregation"
+                element={
+                  <ProtectedRoute>
+                    <FpoAggregationPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/data-sources"
+                element={
+                  <ProtectedRoute>
+                    <DataSourcesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute>
+                    <AdminDataMonitorPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

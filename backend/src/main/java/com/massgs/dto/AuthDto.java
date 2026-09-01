@@ -1,6 +1,5 @@
 package com.massgs.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
@@ -52,11 +51,20 @@ public class AuthDto {
     @Builder
     public static class LoginRequest {
         @NotBlank
-        @Email
-        private String email;
+        private String identifier; // Email, Mobile number, or MASSGS User ID
 
         @NotBlank
         private String password;
+
+        // Fallback for legacy JSON using 'email' field
+        public String getIdentifier() {
+            if (identifier != null && !identifier.isBlank()) {
+                return identifier;
+            }
+            return email;
+        }
+
+        private String email;
     }
 
     @Getter
@@ -66,25 +74,59 @@ public class AuthDto {
     @Builder
     public static class RegisterRequest {
         @NotBlank
-        @Email
+        private String fullName;
+
         private String email;
+
+        private String phoneNumber;
 
         @NotBlank
         private String password;
 
-        @NotBlank
-        private String fullName;
+        private String confirmPassword;
 
         @NotBlank
-        private String role; // ROLE_FARMER, ROLE_BUYER, ROLE_ADMIN
+        private String role; // FARMER or BUYER (or ROLE_FARMER / ROLE_BUYER)
 
-        private String phoneNumber;
         private String district;
         private String state;
         private String mandal;
         private String village;
         private String organizationName;
         private String buyerType;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ForgotPasswordRequest {
+        @NotBlank
+        private String identifier; // Email or Mobile Number
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ForgotPasswordResponse {
+        private String message;
+        private String resetToken;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ResetPasswordRequest {
+        @NotBlank
+        private String token;
+
+        @NotBlank
+        private String newPassword;
     }
 
     @Getter
@@ -103,5 +145,6 @@ public class AuthDto {
         private String state;
         private Long userId;
         private Long roleEntityId;
+        private String message;
     }
 }

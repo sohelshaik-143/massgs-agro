@@ -48,6 +48,16 @@ public class AuthController {
         return ResponseEntity.ok(userService.loginUser(request));
     }
 
+    @PostMapping("/forgot-password")
+    public ResponseEntity<AuthDto.ForgotPasswordResponse> forgotPassword(@Valid @RequestBody AuthDto.ForgotPasswordRequest request) {
+        return ResponseEntity.ok(userService.forgotPassword(request));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<AuthDto.AuthResponse> resetPassword(@Valid @RequestBody AuthDto.ResetPasswordRequest request) {
+        return ResponseEntity.ok(userService.resetPassword(request));
+    }
+
     @GetMapping("/profile")
     public ResponseEntity<AuthDto.AuthResponse> getProfile() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();

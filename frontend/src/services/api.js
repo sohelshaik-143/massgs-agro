@@ -34,11 +34,28 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Clear token on authentication expiration
+      localStorage.removeItem('massgs_token');
+      localStorage.removeItem('massgs_user');
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register')) {
+        window.dispatchEvent(new CustomEvent('massgs:auth-expired'));
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const authApi = {
   requestOtp: (data) => apiClient.post('/auth/otp/request', data),
   verifyOtp: (data) => apiClient.post('/auth/otp/verify', data),
   login: (credentials) => apiClient.post('/auth/login', credentials),
   register: (userData) => apiClient.post('/auth/register', userData),
+  forgotPassword: (data) => apiClient.post('/auth/forgot-password', data),
+  resetPassword: (data) => apiClient.post('/auth/reset-password', data),
   getProfile: () => apiClient.get('/auth/profile'),
 };
 

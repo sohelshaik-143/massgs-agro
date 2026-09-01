@@ -39,6 +39,16 @@ public class User {
     @Builder.Default
     private Boolean isPhoneVerified = false;
 
+    @Column(name = "account_status", length = 30)
+    @Builder.Default
+    private String accountStatus = "ACTIVE"; // ACTIVE, SUSPENDED, DEACTIVATED
+
+    @Column(name = "password_reset_token", length = 100)
+    private String passwordResetToken;
+
+    @Column(name = "password_reset_expires_at")
+    private LocalDateTime passwordResetExpiresAt;
+
     private String village;
     private String mandal;
     private String district;
