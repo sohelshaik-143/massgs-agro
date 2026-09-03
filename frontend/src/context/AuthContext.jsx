@@ -19,6 +19,7 @@ export function AuthProvider({ children }) {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [modalDefaultRole, setModalDefaultRole] = useState('ROLE_FARMER');
+  const [modalDefaultMode, setModalDefaultMode] = useState('LOGIN');
 
   useEffect(() => {
     const handleAuthExpired = () => {
@@ -48,8 +49,9 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('massgs_user');
   };
 
-  const openAuthModal = (role = 'ROLE_FARMER') => {
+  const openAuthModal = (role = 'ROLE_FARMER', initialMode = 'LOGIN') => {
     setModalDefaultRole(role);
+    setModalDefaultMode(initialMode);
     setIsAuthModalOpen(true);
   };
 
@@ -70,6 +72,7 @@ export function AuthProvider({ children }) {
         openAuthModal,
         closeAuthModal,
         modalDefaultRole,
+        modalDefaultMode,
       }}
     >
       {children}

@@ -25,9 +25,9 @@ export default function App() {
           <main className="flex-grow">
             <Routes>
               {/* Public Authentication Routes */}
-              <Route path="/login" element={<AuthPage initialMode="LOGIN" />} />
-              <Route path="/register" element={<AuthPage initialMode="REGISTER" />} />
-              <Route path="/forgot-password" element={<AuthPage initialMode="FORGOT_PASSWORD" />} />
+              <Route path="/login" element={<AuthPage key="login" initialMode="LOGIN" />} />
+              <Route path="/register" element={<AuthPage key="register" initialMode="REGISTER" />} />
+              <Route path="/forgot-password" element={<AuthPage key="forgot-password" initialMode="FORGOT_PASSWORD" />} />
 
               {/* Public Entry Gateway */}
               <Route path="/" element={<LandingPage />} />

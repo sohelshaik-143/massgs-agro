@@ -58,12 +58,19 @@ public class UserService {
             throw new IllegalArgumentException("Please provide an Email address or Mobile Number.");
         }
 
-        if (rawEmail != null && !rawEmail.isBlank() && userRepository.existsByEmail(rawEmail)) {
+        if (rawEmail != null && !rawEmail.isBlank() &&
+                (userRepository.existsByEmail(rawEmail) || userRepository.existsByEmailIgnoreCase(rawEmail))) {
             throw new IllegalArgumentException("An account with this email address already exists.");
         }
 
-        if (rawPhone != null && !rawPhone.isBlank() && userRepository.existsByPhoneNumber(rawPhone)) {
-            throw new IllegalArgumentException("An account with this mobile number already exists.");
+        if (rawPhone != null && !rawPhone.isBlank()) {
+            boolean phoneExists = userRepository.existsByPhoneNumber(rawPhone);
+            if (!phoneExists && rawPhone.length() > 10) {
+                phoneExists = userRepository.existsByPhoneNumber(rawPhone.substring(rawPhone.length() - 10));
+            }
+            if (phoneExists) {
+                throw new IllegalArgumentException("An account with this mobile number already exists.");
+            }
         }
 
         String role = request.getRole();
@@ -177,10 +184,16 @@ public class UserService {
 
         String token = tokenProvider.generateToken(auth);
 
-        // Find user by email, MASSGS ID, or phone
+        // Find user by email, MASSGS ID, or phone (case-insensitive and formatted)
         Optional<User> userOpt = userRepository.findByEmail(trimmedIdentifier);
         if (userOpt.isEmpty()) {
+            userOpt = userRepository.findByEmailIgnoreCase(trimmedIdentifier);
+        }
+        if (userOpt.isEmpty()) {
             userOpt = userRepository.findByMassgsId(trimmedIdentifier.toUpperCase());
+        }
+        if (userOpt.isEmpty()) {
+            userOpt = userRepository.findByMassgsIdIgnoreCase(trimmedIdentifier);
         }
         if (userOpt.isEmpty()) {
             userOpt = userRepository.findByPhoneNumber(trimmedIdentifier);
@@ -189,6 +202,9 @@ public class UserService {
             String digitsOnly = trimmedIdentifier.replaceAll("[^0-9]", "");
             if (!digitsOnly.isEmpty()) {
                 userOpt = userRepository.findByPhoneNumber(digitsOnly);
+                if (userOpt.isEmpty() && digitsOnly.length() > 10) {
+                    userOpt = userRepository.findByPhoneNumber(digitsOnly.substring(digitsOnly.length() - 10));
+                }
             }
         }
 
@@ -231,10 +247,22 @@ public class UserService {
 
         Optional<User> userOpt = userRepository.findByEmail(identifier);
         if (userOpt.isEmpty()) {
-            userOpt = userRepository.findByPhoneNumber(identifier.replaceAll("[^0-9]", ""));
+            userOpt = userRepository.findByEmailIgnoreCase(identifier);
+        }
+        if (userOpt.isEmpty()) {
+            String digits = identifier.replaceAll("[^0-9]", "");
+            if (!digits.isEmpty()) {
+                userOpt = userRepository.findByPhoneNumber(digits);
+                if (userOpt.isEmpty() && digits.length() > 10) {
+                    userOpt = userRepository.findByPhoneNumber(digits.substring(digits.length() - 10));
+                }
+            }
         }
         if (userOpt.isEmpty()) {
             userOpt = userRepository.findByMassgsId(identifier.toUpperCase());
+        }
+        if (userOpt.isEmpty()) {
+            userOpt = userRepository.findByMassgsIdIgnoreCase(identifier);
         }
 
         String resetToken = null;

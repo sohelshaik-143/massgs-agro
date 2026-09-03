@@ -131,8 +131,9 @@ public class MarketplaceWorkflowService {
                     ? offer.getProduceListing().getCrop().getName() : "this crop";
 
             List<Offer> farmerOffers = offerRepository.findByFarmerIdOrderByCreatedAtDesc(farmerId);
+            final Long currentOfferId = offer.getId();
             boolean alreadyAcceptedForCrop = farmerOffers.stream()
-                    .filter(o -> !o.getId().equals(offer.getId()))
+                    .filter(o -> !o.getId().equals(currentOfferId))
                     .filter(o -> "ACCEPTED".equalsIgnoreCase(o.getStatus()))
                     .filter(o -> o.getBuyer() != null && o.getBuyer().getId().equals(buyerId))
                     .anyMatch(o -> {

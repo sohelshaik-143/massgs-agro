@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { authApi } from '../services/api';
+import { loginLocalUser, registerLocalUser } from '../utils/localAuth';
 import { 
   Sprout, Building2, ShieldCheck, X, ArrowRight, CheckCircle2, 
   AlertCircle, Lock, User, Mail, Phone, KeyRound, Eye, EyeOff, Sparkles 
 } from 'lucide-react';
 
 export default function AuthModal() {
-  const { isAuthModalOpen, closeAuthModal, login, modalDefaultRole } = useAuth();
+  const { isAuthModalOpen, closeAuthModal, login, modalDefaultRole, modalDefaultMode } = useAuth();
   const { t, language } = useLanguage();
 
-  const [mode, setMode] = useState('LOGIN'); // 'LOGIN' | 'REGISTER' | 'REGISTER_SUCCESS' | 'FORGOT_PASSWORD'
+  const [mode, setMode] = useState(modalDefaultMode || 'LOGIN'); // 'LOGIN' | 'REGISTER' | 'REGISTER_SUCCESS' | 'FORGOT_PASSWORD'
   const [role, setRole] = useState(modalDefaultRole || 'ROLE_FARMER');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,6 +32,14 @@ export default function AuthModal() {
   // Forgot password state
   const [forgotIdentifier, setForgotIdentifier] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState('');
+
+  useEffect(() => {
+    if (isAuthModalOpen) {
+      setMode(modalDefaultMode || 'LOGIN');
+      setRole(modalDefaultRole || 'ROLE_FARMER');
+      setError('');
+    }
+  }, [isAuthModalOpen, modalDefaultMode, modalDefaultRole]);
 
   if (!isAuthModalOpen) return null;
 
@@ -55,44 +64,22 @@ export default function AuthModal() {
       closeAuthModal();
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message;
+      // First check local/offline authentication
+      const localResult = loginLocalUser(identifier.trim(), password);
+      if (localResult.success) {
+        login(localResult.user);
+        closeAuthModal();
+        return;
+      }
+
       if (err.response?.status === 400 || err.response?.status === 401 || errMsg?.includes('Invalid') || errMsg?.includes('credentials')) {
         setError(language === 'en'
           ? 'Invalid credentials. Please check your email/mobile and password.'
           : 'చెల్లని ఆధారాలు. దయచేసి మీ ఇమెయిల్/మొబైల్ మరియు పాస్‌వర్డ్‌ను తనిఖీ చేయండి.');
       } else {
-        // Fallback for offline demo
-        const cleanId = identifier.trim().toLowerCase();
-        if (cleanId.includes('farmer') || cleanId.includes('9123456780')) {
-          login({
-            token: 'demo-farmer-session-token',
-            massgsId: 'MASSGS-F-8K42P7Q9',
-            fullName: 'Venkat Farmer',
-            email: 'farmer.venkat@massgs.com',
-            phoneNumber: '9123456780',
-            role: 'ROLE_FARMER',
-            userId: 1,
-            district: 'Guntur',
-            state: 'Andhra Pradesh',
-          });
-          closeAuthModal();
-        } else if (cleanId.includes('buyer') || cleanId.includes('9876543210')) {
-          login({
-            token: 'demo-buyer-session-token',
-            massgsId: 'MASSGS-B-4H91XK27',
-            fullName: 'Coastal Agro Procurement',
-            email: 'procurement@coastalagro.com',
-            phoneNumber: '9876543210',
-            role: 'ROLE_BUYER',
-            userId: 2,
-            district: 'Guntur',
-            state: 'Andhra Pradesh',
-          });
-          closeAuthModal();
-        } else {
-          setError(language === 'en'
-            ? 'Invalid credentials. Please check your email/mobile and password.'
-            : 'చెల్లని ఆధారాలు. దయచేసి మీ ఇమెయిల్/మొబైల్ మరియు పాస్‌వర్డ్‌ను తనిఖీ చేయండి.');
-        }
+        setError(localResult.message || (language === 'en'
+          ? 'Invalid credentials. Please check your email/mobile and password.'
+          : 'చెల్లని ఆధారాలు. దయచేసి మీ ఇమెయిల్/మొబైల్ మరియు పాస్‌వర్డ్‌ను తనిఖీ చేయండి.'));
       }
     } finally {
       setLoading(false);
@@ -136,19 +123,38 @@ export default function AuthModal() {
         confirmPassword: confirmPassword,
         role: role,
       });
+      // Also save locally so offline fallback has it
+      try {
+        registerLocalUser({
+          fullName: fullName.trim(),
+          email: cleanEmail,
+          phoneNumber: cleanPhone,
+          password: password,
+          role: role,
+        });
+      } catch (_) {}
       setRegisteredUserId(res.data.massgsId);
       setMode('REGISTER_SUCCESS');
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message;
-      if (errMsg?.includes('already exists')) {
-        setError(errMsg);
+      if (err.response?.status === 400 || errMsg?.includes('already exists')) {
+        setError(errMsg || (language === 'en'
+          ? 'An account with this email address or mobile number already exists.'
+          : 'ఈ ఇమెయిల్ లేదా మొబైల్ నంబర్‌తో ఖాతా ఇప్పటికే ఉంది.'));
       } else {
-        const prefix = role === 'ROLE_BUYER' ? 'MASSGS-B-' : 'MASSGS-F-';
-        const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-        let code = '';
-        for (let i = 0; i < 8; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-        setRegisteredUserId(prefix + code);
-        setMode('REGISTER_SUCCESS');
+        try {
+          const localUser = registerLocalUser({
+            fullName: fullName.trim(),
+            email: cleanEmail,
+            phoneNumber: cleanPhone,
+            password: password,
+            role: role,
+          });
+          setRegisteredUserId(localUser.massgsId);
+          setMode('REGISTER_SUCCESS');
+        } catch (localErr) {
+          setError(localErr.message);
+        }
       }
     } finally {
       setLoading(false);
@@ -321,6 +327,11 @@ export default function AuthModal() {
                 type="button"
                 onClick={() => {
                   setError('');
+                  if (identifier.includes('@') && !email) {
+                    setEmail(identifier.trim());
+                  } else if (/^\d+$/.test(identifier.trim()) && !phoneNumber) {
+                    setPhoneNumber(identifier.trim());
+                  }
                   setMode('REGISTER');
                 }}
                 className="w-full py-2 rounded-xl border border-emerald-600 text-emerald-700 hover:bg-emerald-50 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
@@ -476,6 +487,9 @@ export default function AuthModal() {
                 type="button"
                 onClick={() => {
                   setError('');
+                  if (!identifier && (email || phoneNumber)) {
+                    setIdentifier(email.trim() || phoneNumber.trim());
+                  }
                   setMode('LOGIN');
                 }}
                 className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer"

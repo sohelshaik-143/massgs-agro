@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { authApi } from '../services/api';
+import { loginLocalUser, registerLocalUser } from '../utils/localAuth';
 import { 
   Sprout, Building2, ShieldCheck, Lock, Mail, Phone, User, 
   ArrowRight, CheckCircle2, AlertCircle, KeyRound, Eye, EyeOff, RefreshCw, Sparkles 
@@ -49,6 +50,12 @@ export default function AuthPage({ initialMode = 'LOGIN' }) {
     }
   }, [isAuthenticated, navigate, redirectPath]);
 
+  useEffect(() => {
+    setMode(initialMode);
+    setError('');
+    setSuccessMessage('');
+  }, [initialMode, location.pathname]);
+
   // Handle Login
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -73,65 +80,22 @@ export default function AuthPage({ initialMode = 'LOGIN' }) {
       navigate(redirectPath, { replace: true });
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message;
+      // First try local auth fallback
+      const localResult = loginLocalUser(identifier.trim(), password);
+      if (localResult.success) {
+        login(localResult.user);
+        navigate(redirectPath, { replace: true });
+        return;
+      }
+
       if (err.response?.status === 400 || err.response?.status === 401 || errMsg?.includes('Invalid') || errMsg?.includes('credentials')) {
         setError(language === 'en'
           ? 'Invalid credentials. Please check your email/mobile and password.'
           : 'చెల్లని ఆధారాలు. దయచేసి మీ ఇమెయిల్/మొబైల్ మరియు పాస్‌వర్డ్‌ను తనిఖీ చేయండి.');
       } else {
-        // Fallback for offline demonstration if server is not reachable
-        console.warn('Backend login endpoint unavailable, checking credentials locally:', err);
-        const localUsers = JSON.parse(localStorage.getItem('massgs_local_registered_users') || '[]');
-        const cleanId = identifier.trim().toLowerCase();
-        const matched = localUsers.find(u => 
-          u.email?.toLowerCase() === cleanId || 
-          u.phoneNumber === cleanId || 
-          u.massgsId?.toLowerCase() === cleanId
-        );
-
-        if (matched) {
-          login({
-            token: 'local-jwt-session-' + Date.now(),
-            massgsId: matched.massgsId,
-            fullName: matched.fullName,
-            email: matched.email,
-            phoneNumber: matched.phoneNumber,
-            role: matched.role,
-            userId: matched.id || 1,
-            district: matched.district || 'Guntur',
-            state: matched.state || 'Andhra Pradesh',
-          });
-          navigate(redirectPath, { replace: true });
-        } else if (cleanId.includes('farmer') || cleanId.includes('9123456780')) {
-          login({
-            token: 'demo-farmer-session-token',
-            massgsId: 'MASSGS-F-8K42P7Q9',
-            fullName: 'Venkat Farmer',
-            email: 'farmer.venkat@massgs.com',
-            phoneNumber: '9123456780',
-            role: 'ROLE_FARMER',
-            userId: 1,
-            district: 'Guntur',
-            state: 'Andhra Pradesh',
-          });
-          navigate(redirectPath, { replace: true });
-        } else if (cleanId.includes('buyer') || cleanId.includes('9876543210')) {
-          login({
-            token: 'demo-buyer-session-token',
-            massgsId: 'MASSGS-B-4H91XK27',
-            fullName: 'Coastal Agro Procurement',
-            email: 'procurement@coastalagro.com',
-            phoneNumber: '9876543210',
-            role: 'ROLE_BUYER',
-            userId: 2,
-            district: 'Guntur',
-            state: 'Andhra Pradesh',
-          });
-          navigate(redirectPath, { replace: true });
-        } else {
-          setError(language === 'en'
-            ? 'Invalid credentials. Please check your email/mobile and password.'
-            : 'చెల్లని ఆధారాలు. దయచేసి మీ ఇమెయిల్/మొబైల్ మరియు పాస్‌వర్డ్‌ను తనిఖీ చేయండి.');
-        }
+        setError(localResult.message || (language === 'en'
+          ? 'Invalid credentials. Please check your email/mobile and password.'
+          : 'చెల్లని ఆధారాలు. దయచేసి మీ ఇమెయిల్/మొబైల్ మరియు పాస్‌వర్డ్‌ను తనిఖీ చేయండి.'));
       }
     } finally {
       setLoading(false);
@@ -189,56 +153,44 @@ export default function AuthPage({ initialMode = 'LOGIN' }) {
       const res = await authApi.register(payload);
       const generatedId = res.data.massgsId;
 
+      try {
+        registerLocalUser({
+          fullName: fullName.trim(),
+          email: cleanEmail,
+          phoneNumber: cleanPhone,
+          password: password,
+          role: role,
+          district: district,
+          state: state,
+        });
+      } catch (_) {}
+
       setRegisteredUserId(generatedId);
       setRegisteredUserName(fullName.trim());
       setMode('REGISTER_SUCCESS');
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message;
       if (err.response?.status === 400 || errMsg?.includes('already exists')) {
-        setError(errMsg);
+        setError(errMsg || (language === 'en'
+          ? 'An account with this email address or mobile number already exists.'
+          : 'ఈ ఇమెయిల్ లేదా మొబైల్ నంబర్‌తో ఖాతా ఇప్పటికే ఉంది.'));
       } else {
-        console.warn('Backend register unavailable, saving account locally:', err);
-        // Secure client-side fallback generation
-        const prefix = role === 'ROLE_BUYER' ? 'MASSGS-B-' : 'ROLE_ADMIN' === role ? 'MASSGS-A-' : 'MASSGS-F-';
-        const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-        let uniqueCode = '';
-        for (let i = 0; i < 8; i++) {
-          uniqueCode += chars.charAt(Math.floor(Math.random() * chars.length));
+        try {
+          const localUser = registerLocalUser({
+            fullName: fullName.trim(),
+            email: cleanEmail,
+            phoneNumber: cleanPhone,
+            password: password,
+            role: role,
+            district: district,
+            state: state,
+          });
+          setRegisteredUserId(localUser.massgsId);
+          setRegisteredUserName(fullName.trim());
+          setMode('REGISTER_SUCCESS');
+        } catch (localErr) {
+          setError(localErr.message);
         }
-        const fallbackId = prefix + uniqueCode;
-
-        const newAccount = {
-          id: Date.now(),
-          massgsId: fallbackId,
-          fullName: fullName.trim(),
-          email: cleanEmail || `user-${fallbackId.toLowerCase().replace(/[^a-z0-9]/g, '')}@massgs.local`,
-          phoneNumber: cleanPhone || '',
-          role: role,
-          district: district,
-          state: state,
-          createdAt: new Date().toISOString(),
-        };
-
-        const existingUsers = JSON.parse(localStorage.getItem('massgs_local_registered_users') || '[]');
-        const duplicate = existingUsers.some(u => 
-          (cleanEmail && u.email?.toLowerCase() === cleanEmail) || 
-          (cleanPhone && u.phoneNumber === cleanPhone)
-        );
-
-        if (duplicate) {
-          setError(language === 'en' 
-            ? 'An account with this email or mobile number already exists.' 
-            : 'ఈ ఇమెయిల్ లేదా మొబైల్ నంబర్‌తో ఖాతా ఇప్పటికే ఉంది.');
-          setLoading(false);
-          return;
-        }
-
-        existingUsers.push(newAccount);
-        localStorage.setItem('massgs_local_registered_users', JSON.stringify(existingUsers));
-
-        setRegisteredUserId(fallbackId);
-        setRegisteredUserName(fullName.trim());
-        setMode('REGISTER_SUCCESS');
       }
     } finally {
       setLoading(false);
@@ -471,6 +423,11 @@ export default function AuthPage({ initialMode = 'LOGIN' }) {
                 type="button"
                 onClick={() => {
                   setError('');
+                  if (identifier.includes('@') && !email) {
+                    setEmail(identifier.trim());
+                  } else if (/^\d+$/.test(identifier.trim()) && !phoneNumber) {
+                    setPhoneNumber(identifier.trim());
+                  }
                   setMode('REGISTER');
                 }}
                 className="w-full py-2.5 rounded-xl border border-emerald-600 text-emerald-700 hover:bg-emerald-50 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
@@ -670,6 +627,9 @@ export default function AuthPage({ initialMode = 'LOGIN' }) {
                 type="button"
                 onClick={() => {
                   setError('');
+                  if (!identifier && (email || phoneNumber)) {
+                    setIdentifier(email.trim() || phoneNumber.trim());
+                  }
                   setMode('LOGIN');
                 }}
                 className="text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer"

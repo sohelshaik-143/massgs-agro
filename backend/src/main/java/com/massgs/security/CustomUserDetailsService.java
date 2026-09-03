@@ -23,12 +23,12 @@ public class CustomUserDetailsService implements UserDetailsService {
 
         String trimmed = identifier.trim();
 
-        // 1. Try by Email
-        Optional<User> userOpt = userRepository.findByEmail(trimmed);
+        // 1. Try by Email (case-insensitive)
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(trimmed);
 
-        // 2. Try by MASSGS ID
+        // 2. Try by MASSGS ID (case-insensitive)
         if (userOpt.isEmpty()) {
-            userOpt = userRepository.findByMassgsId(trimmed.toUpperCase());
+            userOpt = userRepository.findByMassgsIdIgnoreCase(trimmed);
         }
 
         // 3. Try by Phone Number (raw or cleaned digits)
@@ -39,6 +39,9 @@ public class CustomUserDetailsService implements UserDetailsService {
             String digitsOnly = trimmed.replaceAll("[^0-9]", "");
             if (!digitsOnly.isEmpty()) {
                 userOpt = userRepository.findByPhoneNumber(digitsOnly);
+                if (userOpt.isEmpty() && digitsOnly.length() > 10) {
+                    userOpt = userRepository.findByPhoneNumber(digitsOnly.substring(digitsOnly.length() - 10));
+                }
             }
         }
 
